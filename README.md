@@ -1,30 +1,70 @@
 # Centinela · Hackatón By Paseo (Business AI School · On Business)
 
-Sistema de agentes de IA que vigila los datos de **Distribuidora Andina S.A.S.** (sintética), detecta problemas antes de que cuesten dinero, explica la causa con evidencia y propone acciones que solo se ejecutan con aprobación humana.
+Sistema de agentes de IA de vigilancia operacional y financiera para **Distribuidora Andina S.A.S.** (≈270 mil registros, 12 meses, ≈ $23.500 M COP en ventas netas). Detecta anomalías antes de que generen pérdidas, investiga la causa raíz cruzando datos y políticas en PDF, propone acciones cuantificadas en pesos y permite ejecutarlas solo con aprobación humana y bitácora inmutable.
 
-**Agentes:** Vigía (detecta) → Analista (causa raíz + políticas) → Estratega (1-3 acciones con $ y confianza) → ⏸ Humano → Ejecutor (borradores + bitácora).
-**Regla de oro:** los números los calcula SQL/Python; el LLM nunca inventa cifras.
-**Stack:** AWS serverless (Lambda, Step Functions, Bedrock, DynamoDB, S3+DuckDB/Parquet, CloudFront), Terraform, React+Vite.
+---
+
+## Principios y flujo de agentes
+1. **Regla de oro:** los números los calcula código determinista (Python/SQL sobre DuckDB). El modelo (Claude Haiku 4.5 en Bedrock) razona, contrasta políticas y redacta; nunca inventa cifras.
+2. **Flujo:** `Vigía (DuckDB)` → `Analista (Haiku + Knowledge Base)` → `Estratega (Haiku + cálculo en Python)` → **⏸ Humano (aprobar / editar / rechazar)** → `Ejecutor (borradores + bitácora)`.
+3. **Privacidad:** las herramientas entregan IDs (V03, C0496), no nombres de personas; Bedrock Guardrails anonimiza PII como segunda capa.
+
+## Stack (100 % serverless AWS, región `us-east-1`)
+- **Frontend:** React + Vite + Tailwind + shadcn/ui + Recharts en **AWS Amplify Hosting**.
+- **Backend:** FastAPI en **una Lambda contenedor** con AWS Lambda Web Adapter, expuesta por **Function URL** con streaming (SSE). El pipeline de agentes corre asíncrono.
+- **Orquestación:** **LangGraph** con `interrupt()` y checkpoints en DynamoDB.
+- **IA:** **Amazon Bedrock**, modelo `us.anthropic.claude-haiku-4-5-20251001-v1:0`, **Knowledge Base** con los 3 PDFs en S3 + **S3 Vectors** + Titan Embeddings V2, y **Guardrails** (PII + ataques de prompt).
+- **Datos:** **DuckDB** (`centinela.duckdb` en la imagen, solo lectura) con las 7 vistas parametrizadas por `corte`.
+- **Herramientas:** **FastMCP** in-process (`consultar_vista`, `buscar_politica`, `calcular_impacto`, `crear_borrador`).
+- **Persistencia y auditoría:** **DynamoDB** (alertas, bitácora con SHA-256 encadenado, checkpoints, trazas de costo).
+- **Contratos:** **Pydantic v2** en todas las fronteras (API, herramientas, LLM, persistencia).
+- **Monitorización:** **CloudWatch** (logs JSON, métricas EMF, GenAI observability), Bedrock invocation logging, X-Ray, tabla de trazas con costo por alerta y **promptfoo** para pruebas; Langfuse/LangSmith descartados en el MVP.
+- **IaC:** **Terraform**.
+
+## Estructura del monorepo (planificada; hoy solo existen `docs/`, `Kit_Equipos/` y los `.md`)
+```
+Centinela/
+├── backend/            # api/, agents/, semantic/, tools/
+├── frontend/           # React + Vite (Amplify)
+├── infra/              # Terraform
+├── evals/              # EJ-01 SQL, EJ-02 alertas, EJ-03 seguridad, multi-semilla
+├── docs/               # documentación por área
+├── Kit_Equipos/        # kit oficial (CSV, SQL, políticas, generador)
+├── plan_centinela_hackathon.md
+├── global_tasks.md
+└── ideas_creativas.md
+```
 
 ## Mapa de documentación
-| Doc | Contenido |
+| Documento | Descripción |
 |---|---|
-| [docs/01_negocio.md](docs/01_negocio.md) | KPIs, políticas, escenarios S1-S6 con entidades halladas |
-| [docs/02_arquitectura_aws.md](docs/02_arquitectura_aws.md) | Arquitectura, decisiones, costos, riesgos |
-| [global_tasks.md](global_tasks.md) | Roadmap detallado por día |
-| [ideas_creativas.md](ideas_creativas.md) | Diferenciadores e ideas por prioridad |
-| [docs/fuente_pdf_reto.txt](docs/fuente_pdf_reto.txt) | Texto extraído del PDF del reto y de las 3 políticas |
-| `Kit_Equipos/` | Kit original (CSV, SQL, políticas, generador, evals) |
+| [docs/01_negocio.md](docs/01_negocio.md) | 6 KPIs, políticas y escenarios S1-S6 con cifras verificadas (sin pedidos cancelados). |
+| [docs/02_arquitectura_aws.md](docs/02_arquitectura_aws.md) | Arquitectura, decisiones, seguridad (Guardrails/PII), riesgos y costos. |
+| [docs/03_contratos_datos.md](docs/03_contratos_datos.md) | Contratos Pydantic, handshakes H1-H10, claves de DynamoDB. |
+| [docs/04_diagramas.md](docs/04_diagramas.md) | Diagramas Mermaid: arquitectura, flujo ida y vuelta (S1), estados, linaje de cifras. |
+| [docs/05_monitorizacion.md](docs/05_monitorizacion.md) | Observabilidad nativa AWS, métricas, alarmas y evaluación continua. |
+| [plan_centinela_hackathon.md](plan_centinela_hackathon.md) | Plan de implementación, decisiones aprobadas y plan de verificación. |
+| [global_tasks.md](global_tasks.md) | Roadmap por fases; backtest y explorador de cola larga como opcionales al final. |
+| [ideas_creativas.md](ideas_creativas.md) | Diferenciadores e ideas por prioridad. |
+| [docs/fuente_pdf_reto.txt](docs/fuente_pdf_reto.txt) | Texto extraído del PDF del reto y de las 3 políticas. |
+| [Kit_Equipos/](Kit_Equipos/) | Datos brutos, capa semántica SQL, generador y plantilla de evaluaciones. |
 
 ## Comandos
 ```bash
-# entorno
-uv venv && .venv\Scripts\activate && uv pip install duckdb pandas
-# exploración rápida de datos
-uv run --with duckdb --with pandas python <script>
-# dataset alternativo para pruebas de generalización
-set SEMILLA=11 && uv run python Kit_Equipos/generador/generar_dataset.py
+# entorno (los comandos de backend/ y frontend/ aplican cuando existan esas carpetas)
+uv venv && .venv\Scripts\activate
+cd backend && uv pip install -e . && uv run uvicorn api.main:app --reload --port 8000
+cd ../frontend && npm install && npm run dev
+cd .. && uv run pytest evals/
+
+# dataset alternativo para pruebas de generalización (S1-S5)
+set SEMILLA=12 && uv run python Kit_Equipos/generador/generar_dataset.py
 ```
 
+## Herramientas AWS en desarrollo
+- AWS CLI v2 con credenciales de administrador (cuenta `295894327291`, `us-east-1`).
+- `.mcp.json` (en `.gitignore`) con `aws-api` (solo lectura) y `aws-docs`, instalados con `pip` en `C:\Users\sergi\.venvs\aws-mcp` porque `uvx` falla con `pywin32` en Windows.
+- Conector remoto "AWS MCP" de claude.ai: requiere autenticarlo manualmente (`/mcp`).
+
 ## Estado
-Fase de planificación (análisis del kit completado). Pendiente: criterios de evaluación y agenda (no incluidos en el PDF).
+Fase de planificación completada; documentación revisada y corregida. Pendiente: duración confirmada del evento y láminas 05-07 del PDF (agenda, criterios de evaluación, comercialización).

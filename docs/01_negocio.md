@@ -25,14 +25,20 @@ Distribuidora de consumo masivo (COP), 2 bodegas (BOD-MDE, BOD-BOG), 500 cliente
 ## Escenarios sembrados: hallazgos en el dataset oficial (verificados con DuckDB)
 | # | Escenario | Entidad encontrada | Evidencia |
 |---|---|---|---|
-| S1 | Margen que se erosiona | Línea **Hogar**, proveedor **PR08**, SKU P0001/P0006/P0011/P0021 | costo +28–34 %; margen Hogar 28.1 % (may) → 22.3 % (sep), mínimo 25 % |
-| S2 | Mora creciente | Cliente **C0496** | días de pago 29 → 66 |
-| S3 | Quiebre inminente | **P0119 Gaseosa 3 L**, **BOD-MDE**, clase A | cobertura 3.5 d; OC retrasada (1 en el dataset) |
-| S4 | Descuentos fuera de política | Vendedor **V03** (Caribe) | 316 líneas, ≈ $8,1 M de exceso |
-| S5 | Cliente que se va | Cliente **C0061** | 12.5× su intervalo (último pedido 2026-07-09, 43 pedidos) |
-| S6 | **Oculto** (se revela al cierre) | ¿? | Candidatos a investigar: 42 líneas con precio < costo; Alimentos en 14.2 % (< mín. 15 %); otros cortes dimensión×tiempo |
+| S1 | Margen que se erosiona | Línea **Hogar**, proveedor **PR08**, SKU P0001/P0006/P0011/P0021 | costo +25 % desde 2026-08-15; margen Hogar 28.1 % (may) → 22.3 % (sep), mínimo de política 25 % |
+| S2 | Mora creciente | Cliente **C0496** (Mayorista, cupo $79M) | días de pago pasan de 30 a ~78 días progresivamente entre abr y sep |
+| S3 | Quiebre inminente | **P0119 Gaseosa 3 L**, **BOD-MDE**, clase A | cobertura 3.5 d al cierre con pedidos pendientes; OC-003421 retrasada (1.518 und con PR23) |
+| S4 | Descuentos fuera de política | Vendedor **V03** (Caribe) | **316 líneas**, **$8.096.844** de exceso desde 2026-07-01 (vista oficial, sin cancelados) |
+| S5 | Cliente que se va | Cliente **C0061** (Mayorista) | Compraba cada ~6,6 días (43 pedidos no cancelados); última compra **2026-07-09** (12,5× su intervalo habitual) |
+| S6 | **Oculto** (hipótesis, sin confirmar) | Venta bajo costo | 116 líneas no canceladas con precio neto (tras descuento) < costo, **$2.721.412** de pérdida directa; 87 de las 120 totales son de septiembre. Se reparten así: **P0097** (leche en polvo, Alimentos) 42 líneas, el mejor candidato a "error de precio" propio; **P0006/P0011** 37 líneas, que son consecuencia de S1 (costo +25 % sin ajuste de precio), no un escenario nuevo. Solo 42 líneas tienen `precio_unitario < costo` antes del descuento. Viola la cláusula 4 de COM-POL-002 |
 
-> Estas entidades **no se hardcodean**: el generador (`SEMILLA=n`) las cambia y el jurado puede probar con otra semilla. Solo sirven como ground truth del set de evaluación.
+### Nota sobre cancelados (causa de discrepancias previas)
+Las vistas oficiales (`v_ventas`, `v_descuentos_fuera_politica`, `v_actividad_cliente`) **excluyen pedidos cancelados**. Cifras que los incluyen (S4: 321 líneas/$8.212.352; S5: 07-15 y 44 pedidos; S6: 120 líneas/$2.742.120) **no coinciden** con lo que verá el jurado. El Vigía y las evals deben usar siempre las vistas.
+
+> Estas entidades **no se hardcodean**: el generador (`SEMILLA=n`) las cambia y el jurado puede probar con otra semilla. Solo sirven como ground truth del set de evaluación. El generador **no** siembra S6, así que S6 no se puede validar con otras semillas: solo con el dataset oficial.
+
+### Qué alerta aparece primero en S1
+El costo del proveedor sube el 2026-08-15 (+25 %): la regla de OPE-POL-007 ("costo +5 % → revisar precio en 10 días hábiles") dispara antes que la caída de margen semanal. En el backtest, S1 se detecta por costo, no por margen.
 
 ## Datos a vigilar (trampas de calidad)
 - 781 pedidos cancelados (excluidos de `v_ventas`); facturas ≠ pedidos (19.085 vs 20.013).
