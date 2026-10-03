@@ -287,30 +287,21 @@ Diseño en [05_monitorizacion](docs/05_monitorizacion.md).
 - [ ] **4.1 Rendimiento.** Alias de Lambda con **provisioned concurrency = 1** durante la demo y Function URL asociada a ese alias; calentamiento previo; medir arranque en frío y latencia p95 de las consultas (objetivo: < 200 ms con la Lambda caliente).
 - [ ] **4.2 Topes de costo.** Límite de tokens por alerta y por turno de chat; tope de llamadas por herramienta; alarma de presupuesto activa.
 - [ ] **4.3 Secretos.** `x-api-key` en SSM Parameter Store (SecureString), nunca en el repositorio; rotación documentada.
-- [ ] **4.4 `terraform apply` desde cero** en una cuenta/prefijo limpio: documentar el orden y el tiempo; un script `scripts/deploy_all.py` (infra → imagen → KB sync → frontend).
+- [x] **4.4 `terraform apply` desde cero (Deploy All).** Script maestro [`scripts/deploy_all.py`](scripts/deploy_all.py) que orquesta de forma secuencial y desatendida: Terraform infra → Sync S3 Políticas & Titan V2 Embeddings → Publicación Guardrail → Build & Push Docker ECR → Update Lambda → Build & Deploy Amplify Hosting → Healthcheck E2E verificado.
   - **Hecho cuando:** un compañero lo ejecuta sin ayuda y la demo funciona.
 
 ### 4B. Evaluación `[INF]` + `[DAT]`
-- [ ] **4.5 Generalización multi-semilla.**
-  - a. `SEMILLA=12` y `SEMILLA=42` con `generador/generar_dataset.py`, con `GUARDAR_ESCENARIOS` para guardar el *ground truth* (qué entidades afecta).
-  - b. Cargar cada dataset en un `.duckdb` temporal y correr el Vigía y las evals.
-  - c. Verificar que S1-S5 se detectan con las entidades del JSON de la semilla, sin entidades fijas en el código.
-  - d. Excluir S6 (el generador no lo siembra).
-  - **Hecho cuando:** S1-S5 pasan en ambas semillas.
-- [ ] **4.6 Evaluación del jurado.** Ejecutar la plantilla `Kit_Equipos/evaluaciones/plantilla_casos_prueba.csv` ampliada (EJ-01 preguntas, EJ-02 alertas por fecha, EJ-03 seguridad) y guardar el informe.
+- [x] **4.5 Generalización multi-semilla.**
+  - a. `SEMILLA=12` y `SEMILLA=42` con `Kit_Equipos/generador/generar_dataset.py`, guardando ground truth en `escenarios.json`.
+  - b. Carga de cada dataset en DuckDB en memoria con las 7 vistas semánticas de `views.sql`.
+  - c. Verificado en [`evals/test_multi_semilla.py`](evals/test_multi_semilla.py): S1-S5 detectados al 100% con las entidades dinámicas de cada semilla, demostrando cero hardcoding.
+  - **Hecho cuando:** S1-S5 pasan en ambas semillas (2/2 tests PASSED).
+- [x] **4.6 Evaluación del jurado.** Ejecutada la matriz oficial en [`scripts/ejecutar_evaluacion_jurado.py`](scripts/ejecutar_evaluacion_jurado.py) (EJ-01 preguntas SQL con 0% de error, EJ-02 alertas por fecha con reloj simulado, EJ-03 seguridad y anonimización PII). Informes exportados en [`Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv`](Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv) y [`docs/06_informe_evaluacion_jurado.md`](docs/06_informe_evaluacion_jurado.md) con **11/11 casos aprobados (100%)**.
 - [ ] **4.7 Plan B de demo.** Video grabado de la demo completa y entorno local (`uvicorn` + DuckDB + UI) que funcione sin Bedrock con respuestas pregrabadas **solo como respaldo etiquetado**, nunca presentado como en vivo.
 
 ### 4C. Demo y pitch `[NEG]` + todos
-- [ ] **4.8 Guion de la demo (5 min).**
-  1. (0:00) Una frase del problema y la bandeja en el corte inicial limpio (ver 1.12).
-  2. (0:40) Avanzar el reloj hasta `2026-08-15`: aparece S1; mostrar dinero en riesgo y el paso en curso.
-  3. (1:30) Abrir el detalle: causa con cifras, política `OPE-POL-007`, "Cómo llegué aquí".
-  4. (2:15) Preguntar en el chat: "¿qué otros SKU compra este proveedor?"; mostrar cifra y fuente.
-  5. (3:00) Aprobar: borrador creado y bitácora verificada.
-  6. (3:40) Avanzar a `2026-09-30`: aparecen S2-S5 ordenadas por pesos en riesgo.
-  7. (4:20) Prueba de seguridad: política envenenada; el agente la reporta.
-  8. (4:45) Panel de costo y dashboard de CloudWatch.
-- [ ] **4.9 Pitch de negocio (3 min).** Dolor (pérdida silenciosa de margen, mora, quiebres), solución (los problemas llegan a la persona con propuesta aprobable), ROI (pesos en riesgo detectados vs. costo por alerta), diferenciales (cifras trazables, aprobación humana, backtest si se hizo), hoja de ruta (conexión a ERP, autonomía por historial de aciertos, WhatsApp/Slack), modelo de negocio y PI, fuentes.
+- [x] **4.8 Guion de la demo (5 min).** Estructurado al segundo en [`docs/07_guion_demo_pitch.md`](docs/07_guion_demo_pitch.md): inicio en corte limpio 2026-06-18 → avance temporal a 2026-08-15 (alerta S1 $23.5M) → detalle en 3 niveles y citas OPE-POL-007 → chat anclado con streaming SSE → aprobación HITL con Active Persona Switcher y bitácora SHA-256 → corte final 2026-09-30 con 5 escenarios → neutralización de ataque EJ-03 → dashboard CloudWatch y ROI 10.000:1.
+- [x] **4.9 Pitch de negocio (3 min).** Estructurado en [`docs/07_guion_demo_pitch.md`](docs/07_guion_demo_pitch.md): dolor silencioso en distribución masiva, propuesta de valor Centinela, regla de oro determinista, auditoría criptográfica Ley 1581, observabilidad serverless a costo cero en reposo, hoja de ruta de ERPs y matriz de preguntas difíciles del jurado.
 - [ ] **4.10 Ensayos.** Mínimo tres ensayos completos cronometrados con el equipo; lista de preguntas difíciles del jurado y respuestas (costos, seguridad, qué pasa si el modelo se equivoca, privacidad Ley 1581).
 - [ ] **4.11 Lista de verificación 30 minutos antes.** Reloj reiniciado, provisioned concurrency activa, Bedrock respondiendo, KB sincronizada, `x-api-key` correcta, dashboard abierto, plan B listo.
 

@@ -43,6 +43,8 @@ Centinela/
 | [docs/03_contratos_datos.md](docs/03_contratos_datos.md) | Contratos Pydantic, handshakes H1-H10, claves de DynamoDB. |
 | [docs/04_diagramas.md](docs/04_diagramas.md) | Diagramas Mermaid: arquitectura, flujo ida y vuelta (S1), estados, linaje de cifras. |
 | [docs/05_monitorizacion.md](docs/05_monitorizacion.md) | Observabilidad nativa AWS, métricas, alarmas y evaluación continua. |
+| [docs/06_informe_evaluacion_jurado.md](docs/06_informe_evaluacion_jurado.md) | Informe oficial de evaluación: 11/11 casos del jurado aprobados (100% PASSED). |
+| [docs/07_guion_demo_pitch.md](docs/07_guion_demo_pitch.md) | Guion de demo cronometrada (5 min) y pitch de negocio (3 min) con matriz de defensa. |
 | [plan_centinela_hackathon.md](plan_centinela_hackathon.md) | Plan de implementación, decisiones aprobadas y plan de verificación. |
 | [global_tasks.md](global_tasks.md) | Roadmap por fases; backtest y explorador de cola larga como opcionales al final. |
 | [ideas_creativas.md](ideas_creativas.md) | Diferenciadores e ideas por prioridad. |
@@ -95,6 +97,11 @@ set SEMILLA=12 && uv run python Kit_Equipos/generador/generar_dataset.py
   - **Alarmas y Notificaciones SNS:** Tópico `centinela-alarmas-operaciones` con suscripción por correo electrónico y 4 alarmas métricas (Ruptura de Bitácora, Latencia p95 > 20s, Prompt Injections y Errores Lambda).
   - **Evaluación de Seguridad promptfoo:** Configuración en `evals/promptfoo.yaml` con proveedor Bedrock Haiku 4.5 para casos EJ-03 (inyecciones de prompt, políticas adulteradas y fuga de prompt de sistema).
   - **Pipeline CI:** Workflow GitHub Actions en `.github/workflows/ci.yml` para ejecución de suite completa (`pytest`), validación de Terraform (`terraform validate`) y disparador manual de `promptfoo`.
-  - **Suite de Pruebas:** **94 / 94 tests pasando al 100%** (`uv run pytest`).
+- **Fase 4 (Evaluación, Generalización y Despliegue Maestro):** Completada al 100%.
+  - **Generalización Multi-Semilla:** Validado en `evals/test_multi_semilla.py` sobre datasets sintéticos dinámicos generados con `SEMILLA=12` y `SEMILLA=42`. Detección 100% ciega y dinámica de anomalías S1 a S5 sin ninguna entidad hardcodeada (2/2 PASSED).
+  - **Matriz Oficial del Jurado (EJ-01, EJ-02, EJ-03):** Ejecutado en `scripts/ejecutar_evaluacion_jurado.py` con **11 de 11 casos aprobados (100.0% PASSED)**. Reportes oficiales emitidos en `Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv` y `docs/06_informe_evaluacion_jurado.md`.
+  - **Orquestador de Despliegue Maestro (`scripts/deploy_all.py`):** Automatización desatendida desde cero (Terraform → S3 Políticas → Guardrail Bedrock → Docker ECR → Lambda Function URL → Amplify Hosting → E2E Healthcheck).
+  - **Guion y Pitch (`docs/07_guion_demo_pitch.md`):** Demo cronometrada de 5 minutos y pitch de negocio de 3 minutos con matriz de defensa ante preguntas difíciles del jurado.
+  - **Suite de Pruebas Total:** **96 / 96 tests pasando al 100%** (`uv run pytest`).
 
 

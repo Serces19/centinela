@@ -387,7 +387,7 @@ tablas = {"clientes": clientes_out, "vendedores": vendedores, "productos": produ
 for nombre, df in tablas.items():
     df = df.copy()
     for c in df.columns:
-        if np.issubdtype(df[c].dtype, np.datetime64):
+        if pd.api.types.is_datetime64_any_dtype(df[c]):
             df[c] = df[c].dt.strftime("%Y-%m-%d")
     df.to_csv(os.path.join(SALIDA, f"{nombre}.csv"), index=False, encoding="utf-8")
     print(f"{nombre:20s} {len(df):>8,d} filas")

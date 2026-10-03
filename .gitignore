@@ -40,3 +40,5 @@ build/
 dist/
 *.zip
 .claude/settings.local.json
+temp_*/
+
