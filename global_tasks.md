@@ -50,7 +50,7 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - c. `uv venv` en la raíz y `.venv\Scripts\activate`; `uv pip install -e backend`.
   - d. `.env.example` con `AWS_REGION=us-east-1`, `MODEL_ID`, `CENTINELA_API_KEY` (sin valores reales).
   - **Hecho cuando:** `uv run pytest` corre (aunque haya 0 tests) y el árbol coincide con el README.
-- [ ] **0.9 Estado de Terraform y presupuesto.** `[INF]`
+- [x] **0.9 Estado de Terraform y presupuesto.** `[INF]`
   - a. Crear bucket S3 versionado `centinela-tfstate-295894327291` y tabla DynamoDB de lock (script único en `scripts/bootstrap_tfstate.py`).
   - b. `infra/main.tf` con backend S3, provider y `default_tags { Proyecto = "centinela" }`.
   - c. `aws_budgets_budget` de 20 USD/mes con aviso al 50 % y 80 % por correo (SNS).
