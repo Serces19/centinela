@@ -29,6 +29,7 @@ packages = [
     "semantic",
     "tools",
     "contracts",
+    "services",
 ]
 
 [tool.pytest.ini_options]

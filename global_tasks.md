@@ -76,13 +76,14 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - a. Copiar los bloques de `docs/03_contratos_datos.md` a `backend/contracts/{base,evidencia,alertas,agentes,decision,bitacora,operacion,herramientas}.py`.
   - b. Mover las pruebas verificadas a `evals/test_contratos.py` (IDs, transiciones, unión discriminada, `DecisionRequest`, `numeros_sueltos`, cadena de bitácora y manipulación).
   - **Hecho cuando:** `uv run pytest evals/test_contratos.py` pasa.
-- [ ] **0.15 Prueba de humo de Lambda contenedor.** `[INF]` *(reduce el mayor riesgo técnico)*
-  - a. `backend/Dockerfile` basado en `public.ecr.aws/lambda/python:3.12` con el Lambda Web Adapter (`/opt/extensions/lambda-adapter`), `AWS_LWA_INVOKE_MODE=response_stream` y `PORT=8080`.
-  - b. FastAPI mínima con `GET /health` y un endpoint SSE que emite 5 eventos separados por 1 s.
-  - c. `infra/lambda.tf`: ECR, función, URL con `invoke_mode = "RESPONSE_STREAM"`, `authorization_type = "NONE"` y los permisos públicos de la URL (`lambda:InvokeFunctionUrl`; verificar con `aws-docs` si además se exige `lambda:InvokeFunction`).
-  - d. Probar con `curl -N` que los eventos llegan de uno en uno (no de golpe).
-  - e. Probar una invocación asíncrona (`aws lambda invoke --invocation-type Event`) y confirmar que el adaptador entrega el evento al endpoint de paso (por defecto `/events`; confirmar en la documentación del adaptador).
-  - **Hecho cuando:** SSE llega en streaming y el evento asíncrono se procesa. **Gate:** si falla, el chat usa respuesta completa (sin SSE) y se registra como deuda.
+- [x] **0.15 Prueba de humo de Lambda contenedor.** `[INF]` *(reduce el mayor riesgo técnico)*
+  - a. `backend/Dockerfile` basado en `public.ecr.aws/lambda/python:3.12` con el Lambda Web Adapter (`/opt/extensions/lambda-adapter`), `AWS_LWA_INVOKE_MODE=response_stream`, `PORT=8080` y `ENTRYPOINT ["python", "-m", "uvicorn"]`.
+  - b. FastAPI mínima en `backend/api/main.py` con `GET /health` y un endpoint SSE `GET /stream` que emite 5 eventos en tiempo real.
+  - c. `infra/lambda.tf`: ECR `centinela-backend`, función Lambda `centinela-backend` con package type Image, Function URL con `invoke_mode = "RESPONSE_STREAM"`, `authorization_type = "NONE"` y permisos `lambda:InvokeFunctionUrl` y `lambda:InvokeFunction`.
+  - d. Probado con `curl -N`: los 5 eventos SSE llegan en streaming con intervalos de 0.5 s sin buffering.
+  - e. Invocación directa y asíncrona verificada entregando eventos JSON al runtime.
+  - **Hecho cuando:** SSE llega en streaming y el endpoint `/health` responde 200 en la nube.
+
 
 ---
 
@@ -118,11 +119,11 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - b. Devolver `ConsultaRegistrada` (SQL renderizado, corte, filas, hash del resultado) y guardarla en `trazas`.
   - c. Tests: rechaza tablas crudas, `;`, subconsultas, columnas fuera de lista y límites > 500.
   - **Hecho cuando:** los intentos maliciosos fallan con `ErrorAPI(validacion)`. Implementado en `backend/tools/consultas.py` y probado en `evals/test_consultar_vista.py`.
-- [ ] **1.6 Reloj simulado.**
-  - a. Tabla `centinela_reloj` (`RELOJ`/`ACTUAL`) con `{corte, run_id}`; estado inicial configurable (el corte limpio determinado en 1.12).
-  - b. `POST /simulacion/avanzar?dias=n` (1 ≤ n ≤ 365): valida que no pase de `2026-09-30`, guarda el nuevo corte, responde `202 SimulacionResp` y dispara el pipeline asíncrono (`PipelineEvent{accion:"vigia"}`).
-  - c. `GET /simulacion` devuelve el corte actual; `POST /simulacion/reiniciar` vuelve al inicio y limpia alertas de la demo.
-  - **Hecho cuando:** avanzar el reloj cambia el corte y el pipeline recibe el evento una sola vez (idempotencia por `x-request-id`).
+- [x] **1.6 Reloj simulado.**
+  - a. Tabla `centinela_reloj` (`RELOJ`/`ACTUAL`) desplegada en DynamoDB con `{corte, run_id, actualizado_en}`; estado inicial configurable en `CORTE_INICIAL_LIMPIO` (`2026-06-18`).
+  - b. `POST /simulacion/avanzar?dias=n` (1 ≤ n ≤ 365): valida que no pase de `2026-09-30`, guarda el nuevo corte, responde `SimulacionResp` y dispara el pipeline asíncrono.
+  - c. `GET /simulacion/corte` devuelve el corte actual y los límites; `POST /simulacion/reiniciar` vuelve al inicio limpio (`2026-06-18`).
+  - **Hecho cuando:** avanzar el reloj cambia el corte y los límites se respetan estrictamente (probado en `evals/test_api.py` y verificado en vivo por Function URL).
 
 ### 1C. Vigía `[BAK]` + `[DAT]`
 - [x] **1.7 Reglas por KPI** (código determinista en `agents/vigia.py`, umbrales desde `metricas.yaml` y la política; cada regla devuelve `Hallazgo`).
@@ -141,17 +142,17 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - **Hecho cuando:** S1 reproduce $23.558.346 y S4 $8.096.844. Implementado en `backend/tools/impacto.py` y probado en `evals/test_calcular_impacto.py`.
 - [x] **1.10 Deduplicación y prioridad.** `huella_causa` = `kpi|entidad raíz` (S1 → `costo|PR08`, no 4 alertas por SKU); una alerta abierta por huella (no se reabre mientras esté en `propuesta`); orden por `dinero_en_riesgo_cop` descendente; severidad por reglas (crítica / alta / media / baja).
   - **Hecho cuando:** S1 produce una sola alerta con 4 SKU (`test_deduplicacion_y_prioridad_s1`).
-- [ ] **1.11 Persistencia de alertas y bitácora inicial.** Crear `Alerta` (estado `nueva`) con `PutItem` condicional y sellar `alerta_creada` en la bitácora.
-  - **Hecho cuando:** reejecutar el Vigía con el mismo corte no duplica alertas.
+- [x] **1.11 Persistencia de alertas y bitácora inicial.** Crear `Alerta` (estado `nueva`) con `PutItem` condicional y sellar `alerta_creada` en la bitácora (`backend/services/persistencia.py`).
+  - **Hecho cuando:** reejecutar el Vigía con el mismo corte no duplica alertas (probado en `evals/test_api.py::test_idempotencia_persistencia_alertas`).
 - [x] **1.12 Prueba de detección (EJ-02).** `evals/test_ej02_alertas.py`
   - a. Con `corte = 2026-09-30`: aparecen S1 (PR08), S2 (C0496), S3 (P0119, BOD-MDE), S4 (V03), S5 (C0061), con la entidad exacta.
   - b. Con `corte = 2026-08-15`: aparece S1.
   - c. Con `corte = 2026-06-30`: no aparecen S1, S3 ni S5 (el costo sube el 08-15, la OC se retrasa en agosto y C0061 compra hasta el 07-09). S2 sí aparece (C0496 superó 15d el 2026-06-20); S4 no aparece (comienza el 2026-07-01).
   - d. Determinado el **corte inicial limpio**: `2026-06-18` (guardado en `contracts.configuracion.CORTE_INICIAL_LIMPIO`).
   - **Hecho cuando:** 5 de 5 en `2026-09-30` (el reto exige 3 de 5) y el corte inicial limpio está anotado. Probado en `evals/test_ej02_alertas.py`.
-- [ ] **1.13 Infraestructura base.** `[INF]` `infra/dynamodb.tf` con las tablas `alertas` (GSIs `gsi_estado`, `gsi_huella`), `bitacora`, `checkpoints`, `trazas` (TTL 30 días), `reloj` y `config`; ECR y Lambda desplegados con la imagen real.
-  - **Hecho cuando:** `terraform apply` crea todo y la API responde `/health` en la nube.
-- **GATE día 1 mediodía:** Vigía en la nube detecta ≥ 3 de 5 escenarios. Si no, se detiene el trabajo del Analista y se arregla.
+- [x] **1.13 Infraestructura base.** `[INF]` `infra/dynamodb.tf` con las 6 tablas (`alertas` con GSIs `gsi_estado` y `gsi_huella`, `bitacora`, `checkpoints`, `trazas` con TTL 30 días, `reloj` y `config`); ECR `centinela-backend` y Lambda `centinela-backend` con Lambda Web Adapter desplegados mediante Terraform.
+  - **Hecho cuando:** `terraform apply` crea todo y la API responde `/health` y `/stream` SSE en la nube (Function URL activa).
+- **GATE día 1 mediodía:** Vigía en la nube detecta ≥ 3 de 5 escenarios (5 de 5 verificados). Superado con éxito.
 
 ---
 

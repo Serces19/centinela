@@ -37,3 +37,87 @@ resource "aws_iam_policy" "lambda_bedrock" {
   description = "Permisos minimos para Centinela Lambda en Amazon Bedrock"
   policy      = data.aws_iam_policy_document.lambda_bedrock.json
 }
+
+# Rol de ejecución para Lambda Backend
+resource "aws_iam_role" "lambda_exec" {
+  name = "centinela-lambda-exec-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Modulo = "seguridad"
+  }
+}
+
+# Logs básicos de CloudWatch
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Permisos Bedrock
+resource "aws_iam_role_policy_attachment" "lambda_bedrock" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.lambda_bedrock.arn
+}
+
+# Permisos DynamoDB (con inmutabilidad de bitácora)
+data "aws_iam_policy_document" "lambda_dynamodb" {
+  statement {
+    sid    = "CentinelaDynamoDBTables"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem",
+    ]
+    resources = [
+      aws_dynamodb_table.alertas.arn,
+      "${aws_dynamodb_table.alertas.arn}/index/*",
+      aws_dynamodb_table.bitacora.arn,
+      aws_dynamodb_table.checkpoints.arn,
+      aws_dynamodb_table.trazas.arn,
+      aws_dynamodb_table.reloj.arn,
+      aws_dynamodb_table.config.arn,
+    ]
+  }
+
+  statement {
+    sid    = "CentinelaBitacoraInmutable"
+    effect = "Deny"
+    actions = [
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+    ]
+    resources = [
+      aws_dynamodb_table.bitacora.arn,
+    ]
+  }
+}
+
+resource "aws_iam_policy" "lambda_dynamodb" {
+  name        = "centinela-lambda-dynamodb-policy"
+  description = "Permisos minimos para Centinela Lambda en DynamoDB con bitacora inmutable"
+  policy      = data.aws_iam_policy_document.lambda_dynamodb.json
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.lambda_dynamodb.arn
+}

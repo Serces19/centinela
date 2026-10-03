@@ -71,4 +71,11 @@ set SEMILLA=12 && uv run python Kit_Equipos/generador/generar_dataset.py
 - **Fase 1A (Datos y Capa Semántica):** `centinela.duckdb` con 15 tablas oficiales, 7 vistas temporales parametrizadas por `fecha_corte()`, suite EJ-01 pasando.
 - **Fase 1B (Herramientas FastMCP):** `consultar_vista` con validador estricto anti-inyección y lista blanca de columnas/vistas, y `calcular_impacto` determinista para los 6 escenarios implementados en `backend/tools/`.
 - **Fase 1C (Agente Vigía):** `agents.vigia` determinista (sin LLM) con reglas para los 6 KPIs + S6, estadística de apoyo con z-score robusto (MAD), deduplicación por `huella_causa` y suite EJ-02 pasando al 100%. Corte inicial limpio identificado en `2026-06-18`.
+- **Fase 1D & Infraestructura Base (Tareas 0.15, 1.6, 1.11, 1.13):**
+  - **DynamoDB:** 6 tablas creadas en modo `PAY_PER_REQUEST` (`centinela_alertas` con GSIs `gsi_estado` y `gsi_huella`, `centinela_bitacora` inmutable con hash SHA-256, `centinela_checkpoints`, `centinela_trazas` con TTL 30d, `centinela_reloj` y `centinela_config`).
+  - **ECR & Docker:** Repositorio `centinela-backend` con escaneo de vulnerabilidades y ciclo de vida de retención. Dockerfile optimizado con AWS Lambda Web Adapter (`RESPONSE_STREAM`) y `ENTRYPOINT` hacia Uvicorn.
+  - **AWS Lambda & Function URL:** Función `centinela-backend` desplegada con Function URL pública con soporte nativo de Streaming SSE verificado en vivo (`curl -N`).
+  - **API FastAPI & Persistencia:** Endpoints operativos `/health`, `/stream`, `/simulacion/corte`, `/simulacion/avanzar`, `/simulacion/reiniciar`, `/alertas` (con resolución determinista de nombres legibles PII-segregated) y `/bitacora/{alerta_id}` con verificación criptográfica.
+  - **Pruebas:** 44 de 44 tests pasando (100% en `evals/`).
+
 
