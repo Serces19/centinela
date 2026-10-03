@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "centinela"
+version = "0.1.0"
+description = "Sistema de agentes de IA de vigilancia operacional y financiera para Distribuidora Andina S.A.S."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.8.0",
+    "duckdb>=1.1.0",
+    "boto3>=1.35.0",
+    "langgraph>=0.2.0",
+    "fastmcp>=0.1.0",
+    "python-dotenv>=1.0.1",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "api",
+    "agents",
+    "semantic",
+    "tools",
+    "contracts",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["../evals", "evals"]
+pythonpath = ["."]

@@ -34,17 +34,17 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 - [x] **0.3 Decisiones aprobadas:** `us-east-1`, Haiku 4.5, KB en S3 con S3 Vectors, Amplify, PII con Guardrails, monitorización con CloudWatch, contratos Pydantic.
 - [x] **0.4 Credenciales y Bedrock.** AWS CLI como administrador (cuenta `295894327291`); `converse` con `us.anthropic.claude-haiku-4-5-20251001-v1:0` responde; Titan Embeddings V2 disponible.
 - [x] **0.5 `.mcp.json` local** con `aws-api` (solo lectura) y `aws-docs`, instalados con `pip` en `C:\Users\sergi\.venvs\aws-mcp`.
-- [ ] **0.6 Conector remoto "AWS MCP".** `[INF]`
+- [x] **0.6 Conector remoto "AWS MCP".** `[INF]`
   - a. Abrir `/mcp` en una terminal de Claude Code (o Conectores en la app) y autenticar "AWS MCP" con la cuenta `295894327291`.
   - b. Reiniciar la sesión para cargar `.mcp.json` y aprobar los servidores `aws-api` y `aws-docs`.
   - c. Probar `GetCallerIdentity` por el MCP y una búsqueda en `aws-docs` (por ejemplo "Lambda Web Adapter response streaming").
   - **Hecho cuando:** ambos MCP responden en una sesión nueva.
-- [ ] **0.7 Herramientas locales.** `[INF]`
+- [x] **0.7 Herramientas locales.** `[INF]`
   - a. Actualizar AWS CLI v2 (la 2.27.22 no trae `s3vectors`): `msiexec /i https://awscli.amazonaws.com/AWSCLIV2.msi`. Verificar `aws s3vectors help`.
   - b. Confirmar Terraform ≥ 1.15, Docker, Node ≥ 24 y `uv` (ya instalados). Instalar `promptfoo` más adelante con `npx`.
   - c. En el registro de Terraform, buscar la versión del provider `hashicorp/aws` que incluya `S3_VECTORS` en `aws_bedrockagent_knowledge_base` y los recursos `aws_s3vectors_*`; fijar `~>` esa versión.
   - **Hecho cuando:** `aws --version` ≥ la que incluye `s3vectors` y la versión del provider está anotada en `infra/versions.tf`.
-- [ ] **0.8 Estructura del monorepo.** `[INF]`
+- [x] **0.8 Estructura del monorepo.** `[INF]`
   - a. Crear carpetas `backend/{api,agents,semantic,tools,contracts}`, `frontend/`, `infra/`, `evals/`, `scripts/`.
   - b. `backend/pyproject.toml` con `uv` (Python 3.12): `fastapi`, `uvicorn`, `pydantic>=2`, `duckdb`, `boto3`, `langgraph`, `fastmcp`, `pytest`; sin `pandas` en runtime.
   - c. `uv venv` en la raíz y `.venv\Scripts\activate`; `uv pip install -e backend`.
@@ -69,10 +69,10 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - a. Asignar `[NEG]`, `[DAT]`, `[BAK]`, `[FRO]`, `[INF]` por nombre y anotarlos en el README.
   - b. Acordar canal de comunicación, rama `main` protegida, un commit por tarea y convención de nombres de rama.
   - **Hecho cuando:** cada tarea tiene dueño.
-- [ ] **0.13 Completar contratos faltantes.** `[BAK]`
+- [x] **0.13 Completar contratos faltantes.** `[BAK]`
   - Faltan en [03_contratos](docs/03_contratos_datos.md): `SimulacionResp`, `AlertaVista` (Alerta + nombres resueltos para la UI), `ConfigKpi` (umbral, responsable, autonomía por tipo de acción) y la tabla `centinela_config`.
   - **Hecho cuando:** los cuatro existen en el doc, con prueba, y están en `backend/contracts/`.
-- [ ] **0.14 Contratos Pydantic en código.** `[BAK]`
+- [x] **0.14 Contratos Pydantic en código.** `[BAK]`
   - a. Copiar los bloques de `docs/03_contratos_datos.md` a `backend/contracts/{base,evidencia,alertas,agentes,decision,bitacora,operacion,herramientas}.py`.
   - b. Mover las pruebas verificadas a `evals/test_contratos.py` (IDs, transiciones, unión discriminada, `DecisionRequest`, `numeros_sueltos`, cadena de bitácora y manipulación).
   - **Hecho cuando:** `uv run pytest evals/test_contratos.py` pasa.

@@ -578,6 +578,49 @@ class PipelineEvent(Contrato):
 | `centinela_checkpoints` | `thread_id` (=`alerta_id`) | `checkpoint_id` | — | Estado LangGraph (`EstadoGrafo`) |
 | `centinela_trazas` | `alerta_id` (o `CHAT#<run_id>`) | `ts#tipo` | — | `TrazaLLM` y `ConsultaRegistrada`; TTL 30 días |
 | `centinela_reloj` | `RELOJ` | `ACTUAL` | — | `{corte, run_id}` |
+| `centinela_config` | `clave` | — | — | `CentinelaConfig`: configuración de KPIs, umbrales y parámetros del sistema |
+
+### 8.5 Contratos de configuración, simulación y vistas UI
+```python
+# backend/contracts/operacion.py
+class SimulacionResp(Contrato):
+    """Respuesta a POST /simulacion/avanzar y POST /simulacion/reiniciar (Handshake H1)."""
+    run_id: str
+    corte: date
+    dias_avanzados: int = Field(ge=0)
+    pipeline_disparado: bool = True
+
+
+# backend/contracts/alertas.py
+class AlertaVista(Contrato):
+    """Representación enriquecida de Alerta para la UI (nombres resueltos y propuesta opcional)."""
+    alerta: Alerta
+    nombres_resueltos: dict[str, str] = Field(default_factory=dict)   # { "V03": "Carlos Gómez", ... }
+    propuesta: Any | None = None
+    consultas: list[Any] = Field(default_factory=list)
+
+
+# backend/contracts/configuracion.py
+class ConfigKpi(Contrato):
+    """Configuración de monitoreo por KPI (umbral, responsable y nivel de autonomía)."""
+    kpi: Kpi
+    nombre: str = Field(min_length=3, max_length=100)
+    umbral_defecto: float
+    umbral_actual: float
+    responsable_email: str = Field(pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    autonomia: Literal["informa", "propone", "ejecuta"] = "propone"
+    activo: bool = True
+
+
+class CentinelaConfig(Contrato):
+    """Registro de la tabla `centinela_config` en DynamoDB."""
+    schema_version: str = SCHEMA_VERSION
+    clave: str = Field(min_length=1, max_length=100)   # PK en centinela_config
+    valor: dict[str, Any]
+    actualizado_en: datetime
+    actualizado_por: str = Field(pattern=r"^(sistema|usuario:[a-z0-9_.-]{2,30})$")
+```
 
 ## 9. Verificación
 El código de las secciones 1-8 se extrajo y se ejecutó con `pydantic` v2: validación de IDs, transiciones de estado, unión discriminada de acciones, reglas de `DecisionRequest`, rechazo de números sueltos, cadena de bitácora (incluida la detección de manipulación) y esquema JSON de herramientas. Al crear `backend/contracts/`, estas pruebas pasan a `evals/test_contratos.py`.
+
