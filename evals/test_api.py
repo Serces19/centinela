@@ -15,11 +15,10 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.api.main import app
+from backend.api.main import app, persistencia_service
 from backend.contracts.alertas import AlertaVista
 from backend.contracts.configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO
 from backend.contracts.operacion import SimulacionResp
-from backend.services.persistencia import PersistenciaService, persistencia_service
 
 
 @pytest.fixture
