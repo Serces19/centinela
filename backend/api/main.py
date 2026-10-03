@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 import json
 import logging
+import os
 import time
 from typing import Any
 import uuid
@@ -64,13 +65,17 @@ app = FastAPI(
 # -----------------------------------------------------------------------------
 # Middleware de CORS
 # -----------------------------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# En AWS Lambda, la Function URL ya gestiona nativamente los encabezados CORS en el edge.
+# Si se activa CORSMiddleware dentro de Lambda, se duplica 'Access-Control-Allow-Origin'.
+# Por ende, solo se activa en entornos locales / testing donde no existe Function URL.
+if not os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 # -----------------------------------------------------------------------------
