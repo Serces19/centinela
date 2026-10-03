@@ -67,4 +67,8 @@ set SEMILLA=12 && uv run python Kit_Equipos/generador/generar_dataset.py
 - Conector remoto "AWS MCP" de claude.ai: requiere autenticarlo manualmente (`/mcp`).
 
 ## Estado
-Fase de planificación completada; documentación revisada y corregida. Pendiente: duración confirmada del evento y láminas 05-07 del PDF (agenda, criterios de evaluación, comercialización).
+- **Fase 0 (Preparación):** Completada. Monorepo configurado, contratos Pydantic v2 inmutables, Bedrock verificado.
+- **Fase 1A (Datos y Capa Semántica):** `centinela.duckdb` con 15 tablas oficiales, 7 vistas temporales parametrizadas por `fecha_corte()`, suite EJ-01 pasando.
+- **Fase 1B (Herramientas FastMCP):** `consultar_vista` con validador estricto anti-inyección y lista blanca de columnas/vistas, y `calcular_impacto` determinista para los 6 escenarios implementados en `backend/tools/`.
+- **Fase 1C (Agente Vigía):** `agents.vigia` determinista (sin LLM) con reglas para los 6 KPIs + S6, estadística de apoyo con z-score robusto (MAD), deduplicación por `huella_causa` y suite EJ-02 pasando al 100%. Corte inicial limpio identificado en `2026-06-18`.
+

@@ -113,11 +113,11 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - **Hecho cuando:** pasan contra las vistas con el corte correspondiente.
 
 ### 1B. Herramientas y reloj `[BAK]`
-- [ ] **1.5 `consultar_vista` con validador.**
+- [x] **1.5 `consultar_vista` con validador.**
   - a. `ConsultarVistaIn` → SQL parametrizado (nunca texto libre): lista blanca de vistas `v_*` y de columnas por vista, operadores permitidos, `LIMIT` ≤ 500 forzado.
   - b. Devolver `ConsultaRegistrada` (SQL renderizado, corte, filas, hash del resultado) y guardarla en `trazas`.
   - c. Tests: rechaza tablas crudas, `;`, subconsultas, columnas fuera de lista y límites > 500.
-  - **Hecho cuando:** los intentos maliciosos fallan con `ErrorAPI(validacion)`.
+  - **Hecho cuando:** los intentos maliciosos fallan con `ErrorAPI(validacion)`. Implementado en `backend/tools/consultas.py` y probado en `evals/test_consultar_vista.py`.
 - [ ] **1.6 Reloj simulado.**
   - a. Tabla `centinela_reloj` (`RELOJ`/`ACTUAL`) con `{corte, run_id}`; estado inicial configurable (el corte limpio determinado en 1.12).
   - b. `POST /simulacion/avanzar?dias=n` (1 ≤ n ≤ 365): valida que no pase de `2026-09-30`, guarda el nuevo corte, responde `202 SimulacionResp` y dispara el pipeline asíncrono (`PipelineEvent{accion:"vigia"}`).
@@ -125,7 +125,7 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - **Hecho cuando:** avanzar el reloj cambia el corte y el pipeline recibe el evento una sola vez (idempotencia por `x-request-id`).
 
 ### 1C. Vigía `[BAK]` + `[DAT]`
-- [ ] **1.7 Reglas por KPI** (código determinista en `agents/vigia.py`, umbrales desde `metricas.yaml` y la política; cada regla devuelve `Hallazgo`).
+- [x] **1.7 Reglas por KPI** (código determinista en `agents/vigia.py`, umbrales desde `metricas.yaml` y la política; cada regla devuelve `Hallazgo`).
   - a. **Costo/margen (S1):** costo de proveedor +5 % (OPE-POL-007) y caída de margen > 3 pp frente al promedio de 8 semanas, o margen bajo el mínimo de la línea. S1 se detecta primero por costo el 2026-08-15.
   - b. **Saldo vencido (S2):** `max_dias_vencido > 15` o `saldo_abierto > cupo`; nivel de escalamiento según FIN-POL-004 (1-15, 16-30, 31-60, > 60).
   - c. **Días de pago (S2):** aumento > 50 % frente al histórico del cliente.
@@ -134,21 +134,21 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - f. **Intervalo de compra (S5):** > 3× el intervalo habitual con ≥ 10 pedidos.
   - g. **Venta bajo costo (S6):** líneas con precio neto < costo, agrupadas por SKU.
   - **Hecho cuando:** cada regla tiene su prueba unitaria con una entidad real del dataset oficial.
-- [ ] **1.8 Estadística de apoyo.** z-score robusto (MAD) y tendencia sobre margen semanal y días de pago; sirve como segunda señal, no reemplaza las reglas de política.
-  - **Hecho cuando:** hay un test que marca la caída de margen de Hogar con z-score aunque el umbral de política no se use.
-- [ ] **1.9 Dinero en riesgo por tipo (`calcular_impacto`).** Fórmulas documentadas en el docstring y en `01_negocio.md`:
+- [x] **1.8 Estadística de apoyo.** z-score robusto (MAD) y tendencia sobre margen semanal y días de pago; sirve como segunda señal, no reemplaza las reglas de política.
+  - **Hecho cuando:** hay un test que marca la caída de margen de Hogar con z-score aunque el umbral de política no se use (`test_estadistica_apoyo_zscore_hogar` en `evals/test_ej02_alertas.py`).
+- [x] **1.9 Dinero en riesgo por tipo (`calcular_impacto`).** Fórmulas documentadas en el docstring y en `01_negocio.md`:
   - S1: unidades de 30 días × aumento de costo; S2: saldo vencido (y saldo abierto en riesgo); S3: demanda diaria × precio de lista × días hasta reposición; S4: suma de `descuento_en_exceso`; S5: ventas promedio mensuales del cliente (90 días); S6: pérdida directa por línea.
-  - **Hecho cuando:** S1 reproduce $23.558.346 y S4 $8.096.844.
-- [ ] **1.10 Deduplicación y prioridad.** `huella_causa` = `kpi|entidad raíz` (S1 → `costo|PR08`, no 4 alertas por SKU); una alerta abierta por huella (no se reabre mientras esté en `propuesta`); orden por `dinero_en_riesgo_cop` descendente; severidad por reglas (crítica / alta / media / baja).
-  - **Hecho cuando:** S1 produce una sola alerta con 4 SKU.
+  - **Hecho cuando:** S1 reproduce $23.558.346 y S4 $8.096.844. Implementado en `backend/tools/impacto.py` y probado en `evals/test_calcular_impacto.py`.
+- [x] **1.10 Deduplicación y prioridad.** `huella_causa` = `kpi|entidad raíz` (S1 → `costo|PR08`, no 4 alertas por SKU); una alerta abierta por huella (no se reabre mientras esté en `propuesta`); orden por `dinero_en_riesgo_cop` descendente; severidad por reglas (crítica / alta / media / baja).
+  - **Hecho cuando:** S1 produce una sola alerta con 4 SKU (`test_deduplicacion_y_prioridad_s1`).
 - [ ] **1.11 Persistencia de alertas y bitácora inicial.** Crear `Alerta` (estado `nueva`) con `PutItem` condicional y sellar `alerta_creada` en la bitácora.
   - **Hecho cuando:** reejecutar el Vigía con el mismo corte no duplica alertas.
-- [ ] **1.12 Prueba de detección (EJ-02).** `evals/test_ej02_alertas.py`
+- [x] **1.12 Prueba de detección (EJ-02).** `evals/test_ej02_alertas.py`
   - a. Con `corte = 2026-09-30`: aparecen S1 (PR08), S2 (C0496), S3 (P0119, BOD-MDE), S4 (V03), S5 (C0061), con la entidad exacta.
   - b. Con `corte = 2026-08-15`: aparece S1.
-  - c. Con `corte = 2026-06-30`: no aparecen S1, S3 ni S5 (el costo sube el 08-15, la OC se retrasa en agosto y C0061 compra hasta el 07-09). S2 y S4 pueden aparecer según su fecha de inicio real; **medir y anotar** cuáles son.
-  - d. Determinar el **corte inicial limpio** de la demo (el último día con la bandeja sin alertas de S1-S5) y guardarlo en `config`.
-  - **Hecho cuando:** 5 de 5 en `2026-09-30` (el reto exige 3 de 5) y el corte inicial limpio está anotado.
+  - c. Con `corte = 2026-06-30`: no aparecen S1, S3 ni S5 (el costo sube el 08-15, la OC se retrasa en agosto y C0061 compra hasta el 07-09). S2 sí aparece (C0496 superó 15d el 2026-06-20); S4 no aparece (comienza el 2026-07-01).
+  - d. Determinado el **corte inicial limpio**: `2026-06-18` (guardado en `contracts.configuracion.CORTE_INICIAL_LIMPIO`).
+  - **Hecho cuando:** 5 de 5 en `2026-09-30` (el reto exige 3 de 5) y el corte inicial limpio está anotado. Probado en `evals/test_ej02_alertas.py`.
 - [ ] **1.13 Infraestructura base.** `[INF]` `infra/dynamodb.tf` con las tablas `alertas` (GSIs `gsi_estado`, `gsi_huella`), `bitacora`, `checkpoints`, `trazas` (TTL 30 días), `reloj` y `config`; ECR y Lambda desplegados con la imagen real.
   - **Hecho cuando:** `terraform apply` crea todo y la API responde `/health` en la nube.
 - **GATE día 1 mediodía:** Vigía en la nube detecta ≥ 3 de 5 escenarios. Si no, se detiene el trabajo del Analista y se arregla.

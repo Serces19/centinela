@@ -42,7 +42,7 @@ from .base import (
     Vista,
 )
 from .bitacora import EntradaBitacora, Evento, canonico, verificar_cadena
-from .configuracion import CentinelaConfig, ConfigKpi
+from .configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO, CentinelaConfig, ConfigKpi
 from .decision import Borrador, DecisionRequest, ResultadoEjecucion
 from .evidencia import CifraTrazable, CitaPolitica, ConsultaRegistrada, Unidad, numeros_sueltos
 from .herramientas import (
@@ -153,4 +153,7 @@ __all__ = [
     # Configuracion
     "ConfigKpi",
     "CentinelaConfig",
+    "CORTE_INICIAL_LIMPIO",
+    "FECHA_CORTE_DEFECTO",
 ]
+

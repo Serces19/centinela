@@ -1,10 +1,12 @@
-# backend/contracts/configuracion.py
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import Field
 
 from .base import Contrato, Kpi, SCHEMA_VERSION
+
+CORTE_INICIAL_LIMPIO: date = date(2026, 6, 18)
+FECHA_CORTE_DEFECTO: date = date(2026, 9, 30)
 
 
 class ConfigKpi(Contrato):
