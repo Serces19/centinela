@@ -89,12 +89,12 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 ## Fase 1 · Datos, capa semántica y Vigía (Día 1 mañana)
 
 ### 1A. Datos y vistas en DuckDB `[DAT]`
-- [ ] **1.1 Construir `centinela.duckdb`.**
+- [x] **1.1 Construir `centinela.duckdb`.**
   - a. `scripts/build_duckdb.py`: leer los 15 CSV de `Kit_Equipos/datos/csv` con tipos explícitos (fechas `DATE`, importes `DECIMAL(16,2)`/`BIGINT`) y crear las tablas con las claves y los índices de `01_esquema.sql`.
   - b. Verificar los conteos contra `Kit_Equipos/README.md`: pedidos 20.013, detalle 60.103, facturas 19.085, pagos 17.010, inventario 146.000.
   - c. Guardar el archivo en `backend/semantic/centinela.duckdb` (se hornea en la imagen; no se versiona si pesa > 50 MB, se genera en el build).
   - **Hecho cuando:** los conteos coinciden y el archivo abre en modo `read_only=True`.
-- [ ] **1.2 Reloj simulado en las vistas.**
+- [x] **1.2 Reloj simulado en las vistas.**
   - a. Decisión: tablas persistidas en el `.duckdb` de solo lectura; las **vistas y la macro `fecha_corte()` se crean en memoria al abrir cada conexión** (`ATTACH … (READ_ONLY)` + `CREATE TEMP VIEW`), con el `corte` guardado en una tabla temporal de una fila. Evita escribir en un archivo de solo lectura.
   - b. `backend/semantic/views.sql` con las 7 vistas portadas de `Kit_Equipos/datos/sql/03_capa_semantica.sql`, cambiando `date_trunc`, tipos y casts a la sintaxis de DuckDB.
   - c. Filtrar por `corte` **todas** las vistas: facturas con `fecha_factura <= corte`, pagos con `fecha_pago <= corte`, pedidos con `fecha <= corte`, inventario con `fecha <= corte`, y precios/costos con la vigencia máxima `<= corte`.
@@ -107,7 +107,7 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - a. `docker run` de Postgres, ejecutar `01_esquema.sql`, `02_carga.sql`, `03_capa_semantica.sql`.
   - b. Comparar con DuckDB, para `corte = 2026-09-30` y otros dos cortes, las 7 vistas: conteo de filas y sumas de columnas numéricas.
   - **Hecho cuando:** diferencias = 0 (o explicadas por redondeo ≤ 0,1 pp).
-- [ ] **1.4 Pruebas de las cifras de los escenarios (EJ-01).** `[DAT]`
+- [x] **1.4 Pruebas de las cifras de los escenarios (EJ-01).** `[DAT]`
   - a. `evals/test_ej01_sql.py` con los valores ya verificados: S4 = 316 líneas y $8.096.844; S5 = última compra 2026-07-09 y 43 pedidos; S6 = 116 líneas y $2.721.412; impacto de S1 = $23.558.346/mes (corte 2026-08-15, unidades de 30 días × aumento de costo).
   - b. Añadir 3 preguntas tipo jurado (margen de una línea en un mes, saldo vencido de un cliente, cobertura de un SKU).
   - **Hecho cuando:** pasan contra las vistas con el corte correspondiente.
