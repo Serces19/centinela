@@ -13,7 +13,9 @@ __pycache__/
 
 # Node / frontend
 node_modules/
-web/dist/
+dist/
+frontend/dist/
+*.tsbuildinfo
 
 # Terraform
 .terraform/

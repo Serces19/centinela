@@ -244,23 +244,27 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 ---
 
 ## Fase 3 · Frontend en Amplify (Día 2 mañana-tarde) `[FRO]`
-- [ ] **3.1 Proyecto.** `npm create vite@latest frontend -- --template react-ts`; Tailwind, shadcn/ui, Recharts, React Router.
-- [ ] **3.2 Cliente tipado.** Generar tipos desde `openapi.json` de FastAPI (`openapi-typescript`); una capa `api/` con `fetch`, cabeceras `x-api-key` y `x-request-id`, y lector SSE. La variable `VITE_API_URL` se define en el build.
-- [ ] **3.3 Bandeja de decisiones.** Lista ordenada por dinero en riesgo (COP con formato colombiano), severidad con icono y texto (no solo color), confianza, estado y paso en curso; polling cada 2 s mientras haya alertas en `nueva` o `en_analisis`; banner con el dinero en riesgo total y las 3 decisiones clave.
-- [ ] **3.4 Reloj simulado en UI.** Control para ver el día simulado, botones "+1 día", "+7 días" y "Reiniciar".
-- [ ] **3.5 Detalle en 3 niveles.** (1) una frase y acción propuesta; (2) causa con cifras (cada cifra enlaza su consulta) y la política citada; (3) "Cómo llegué aquí" con las consultas SQL renderizadas y las trazas.
-- [ ] **3.6 Acciones.** Aprobar, Editar (formulario por tipo de acción) y Rechazar (motivo obligatorio); `Idempotency-Key` por clic; manejar `409` mostrando el estado actual.
-- [ ] **3.7 Chat anclado.** Panel con streaming, cifras como etiquetas y enlace a la consulta.
-- [ ] **3.8 Bitácora.** Tabla con evento, actor, hora, hash y sello "cadena verificada" desde `?verificar=true`.
-- [ ] **3.9 Configuración.** KPIs vigilados, umbrales, responsables y nivel de autonomía por tipo de acción (Informa/Propone/Ejecuta; en el hackatón todo en Propone). Lee y guarda `ConfigKpi`.
-- [ ] **3.10 Panel de costo.** Tokens y USD por alerta y total, frente al dinero en riesgo detectado.
-- [ ] **3.11 Accesibilidad y responsive.** Navegación por teclado, foco visible, contraste, vista móvil de la bandeja.
-- [ ] **3.12 Despliegue en Amplify.**
-  - a. `infra/amplify.tf`: `aws_amplify_app` (sin repositorio) y `aws_amplify_branch` `main`.
-  - b. `scripts/deploy_frontend.py`: `npm run build`, zip de `dist/`, `aws amplify create-deployment`, subida del zip por `PUT` a la URL devuelta, `aws amplify start-deployment`.
-  - c. CORS de la Function URL con el dominio de Amplify; la clave `x-api-key` va en el build (limitación aceptada para la demo: el valor queda visible en el bundle; se documenta).
-  - **Hecho cuando:** la URL de Amplify muestra alertas reales de la API.
-- **GATE día 2 tarde:** demo completa en navegador (reloj → alerta → detalle → chat → aprobar → bitácora).
+- [x] **3.1 Proyecto.** Creado en `frontend/` con Vite + React 18 + TypeScript + Tailwind CSS v3 con paleta minimalista off-white (`#f8fafc`), superficies blancas `#ffffff`, Lucide React, Recharts y Sonner. Compilación limpia y ligera (dist 283 KB js / 31 KB css).
+- [x] **3.2 Cliente tipado.** `frontend/src/api/client.ts` con tipos TypeScript sincronizados con los contratos de FastAPI (`AlertaVista`, `DiagnosticoLLM`, `DecisionRequest`, `ResultadoEjecucion`, `BitacoraResponse`, `SimulacionCorte`). Manejo de cabeceras `x-api-key`, `x-request-id`, `Idempotency-Key`, `If-Match`, lector de streams SSE para `/chat` y fallback a la Function URL de AWS Lambda.
+- [x] **3.3 Bandeja de decisiones.** `frontend/src/components/BandejaDecisiones.tsx` con "Valor en 30 segundos" (Hero banner con dinero total en riesgo en COP formateado, conteo de decisiones pendientes y KPIs críticos). Lista de alertas ordenadas descendentemente por `dinero_en_riesgo_cop`, severidad con icono y badge de texto (`CRÍTICA`, `ALTA`, `MEDIA`, `BAJA`), confianza, entidad afectada con nombre resuelto y botones de acción rápida. Polling inteligente cada 3 s mientras haya alertas en análisis o nuevas.
+- [x] **3.4 Reloj simulado en UI.** `frontend/src/components/Topbar.tsx` con control interactivo que visualiza el corte actual (ej. `18 Jun 2026`), badge de "Corte Limpio", y botones de acción inmediata `+1 día`, `+7 días` y `Reiniciar` conectados a `/simulacion/avanzar` y `/simulacion/reiniciar`.
+- [x] **3.5 Detalle en 3 niveles.** `frontend/src/components/DetalleAlertaModal.tsx` estructurado formalmente en:
+  - **Nivel 1:** Resumen ejecutivo de una frase y propuesta del Estratega con impacto en COP.
+  - **Nivel 2:** Causa raíz investigada por el Analista, cifras trazables de DuckDB con `consulta_id` y citas formales de políticas PDF (`FIN-POL-004`, `COM-POL-002`, `OPE-POL-007`) con hash SHA-256.
+  - **Nivel 3 ("Cómo llegué aquí"):** Sección colapsable que renderiza el SQL exacto ejecutado sobre DuckDB y el hash SHA-256 verificado.
+- [x] **3.6 Acciones (HITL).** `frontend/src/components/DecisionModal.tsx` para Aprobar (1-clic con cabecera `Idempotency-Key` y previsualización de artefactos sandbox `sandbox://correos/...`, `sandbox://tareas/...`), Editar (formulario contextual según tipo de acción: slider de % ajuste de precio, nivel de gestión de cobro, vía de OC) y Rechazar (motivo obligatorio $\ge$ 10 caracteres para el aprendizaje por rechazo). Control de concurrencia optimista con manejo de error 409.
+- [x] **3.7 Chat anclado.** `frontend/src/components/ChatSoporte.tsx` con streaming Server-Sent Events (SSE) token a token, renderizado de cifras citadas interactivas como etiquetas, costo en USD (Haiku 4.5), consultas ejecutadas y preguntas sugeridas de un solo clic.
+- [x] **3.8 Bitácora.** `frontend/src/components/BitacoraViewer.tsx` con tabla de auditoría (secuencia `seq`, actor, evento, fecha/hora, hash SHA-256 copiable y payload JSON expandible). Botón *"Verificar Cadena"* que consulta `GET /bitacora/{id}?verificar=true` y muestra el sello verde *"Cadena criptográfica íntegra y verificada"*.
+- [x] **3.9 Configuración.** `frontend/src/components/ConfiguracionPanel.tsx` con control de umbrales para los 5 detectores (margen mínimo, mora máxima, cobertura de inventario, descuentos fuera de política) y matriz de niveles de autonomía (Informa / Propone / Ejecuta; con modo Propone HITL predeterminado).
+- [x] **3.10 Panel de costo.** `frontend/src/components/CostoRoiPanel.tsx` con observabilidad financiera, desglose de modelos (Claude Haiku 4.5, Titan v2, DuckDB in-memory), consumo de tokens, costo en USD y multiplicador ROI frente al dinero en riesgo detectado.
+- [x] **3.11 Accesibilidad, UI/UX minimalista y responsive.**
+  - **Active Persona Switcher** ubicado en el pill inferior del sidebar para alternar con 1 clic entre roles reales: Carlos Mendoza (Gerente Comercial), Ana Restrepo (Directora de Cartera), David Osorio (Líder de Abastecimiento) y Sergio Céspedes (Auditor & Gerencia General), sellando cada decisión con `decidido_por: usuario.id`.
+  - Diseño minimalista off-white (`#f8fafc`), tarjetas `rounded-3xl` blancas con bordes suaves `border-slate-200/70`, contrastes limpios (Slate 900 y Slate 500) y acentos pasteles funcionales (menta, ámbar, rosa, celeste).
+- [x] **3.12 Despliegue en Amplify.**
+  - a. `infra/amplify.tf`: Recurso `aws_amplify_app` con `custom_rule` SPA rewrite a `/index.html`, variables de entorno `VITE_API_URL` y branch `main`. Sintaxis validada con `terraform validate`.
+  - b. `scripts/deploy_frontend.py`: Automatización completa con `boto3` para compilar (`npm run build`), empaquetar `dist.zip`, crear despliegue en Amplify, subir vía PUT y activar el release.
+  - c. Desplegado y verificado exitosamente en vivo: **`https://main.d1y5ytuqvgx3m2.amplifyapp.com`** (Job ID 1 - `SUCCEED`, HTTP 200 OK vía CloudFront).
+- **GATE día 2 tarde:** Demo completa y operativa en el navegador en la nube: reloj interactivo → detección y filtrado de alertas → detalle en 3 niveles → chat SSE → aprobación con Idempotency-Key → verificación criptográfica de bitácora SHA-256. Superado con éxito.
 
 ---
 

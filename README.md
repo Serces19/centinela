@@ -76,6 +76,17 @@ set SEMILLA=12 && uv run python Kit_Equipos/generador/generar_dataset.py
   - **ECR & Docker:** Repositorio `centinela-backend` con escaneo de vulnerabilidades y ciclo de vida de retención. Dockerfile optimizado con AWS Lambda Web Adapter (`RESPONSE_STREAM`) y `ENTRYPOINT` hacia Uvicorn.
   - **AWS Lambda & Function URL:** Función `centinela-backend` desplegada con Function URL pública con soporte nativo de Streaming SSE verificado en vivo (`curl -N`).
   - **API FastAPI & Persistencia:** Endpoints operativos `/health`, `/stream`, `/simulacion/corte`, `/simulacion/avanzar`, `/simulacion/reiniciar`, `/alertas` (con resolución determinista de nombres legibles PII-segregated) y `/bitacora/{alerta_id}` con verificación criptográfica.
-  - **Pruebas:** 44 de 44 tests pasando (100% en `evals/`).
+- **Fase 2 (Agentes, HITL y Seguridad):** LangGraph orquestado con checkpoints en DynamoDB, Analista, Estratega, Ejecutor, Bitácora inmutable SHA-256, Chat SSE anclado y Guardrails de seguridad contra inyecciones y PII. (83 de 83 tests pasando).
+- **Fase 3 (Frontend & Despliegue en AWS Amplify):** Completada.
+  - **Aplicación Web SPA:** React 18 + TypeScript + Vite + Tailwind CSS v3 con UI/UX minimalista y moderna inspirada en el material de referencia (tarjetas blancas redondeadas `rounded-3xl`, fondo off-white `#f8fafc`, acentos pasteles de negocio).
+  - **Control de Reloj Simulado:** Topbar interactiva con avance rápido (+1 día, +7 días, reiniciar a corte limpio `2026-06-18`).
+  - **Bandeja de Decisiones (Hero 30s):** Visualización de dinero en riesgo acumulado en COP, priorización por criticidad, resolución determinista de nombres de clientes/vendedores y polling inteligente.
+  - **Detalle en 3 Niveles:** Resumen ejecutivo de una frase, causa raíz con cifras trazables y políticas citadas (FIN-POL-004, COM-POL-002, OPE-POL-007), y "Cómo llegué aquí" con SQL sobre DuckDB y hash SHA-256.
+  - **Human-in-the-Loop (HITL):** Aprobación con cabecera `Idempotency-Key` y previsualización de artefactos en Sandbox (`sandbox://...`), edición contextual con sliders/selectores y rechazo formal con motivo obligatorio para aprendizaje por refuerzo.
+  - **Active Persona Switcher:** Alternador de rol de usuario en 1 clic (Carlos Mendoza, Ana Restrepo, David Osorio, Sergio Céspedes).
+  - **Chat de Soporte Anclado:** Streaming SSE token a token en tiempo real con cifras citadas y costo en USD.
+  - **Visor de Bitácora Inmutable:** Verificación matemática de la cadena SHA-256 con sello verde de integridad.
+  - **Panel de Costo & ROI:** Métricas de inferencia con Claude Haiku 4.5 en Bedrock frente a capital protegido.
+  - **Hosting en la Nube:** Desplegado en **AWS Amplify Hosting**: **`https://main.d1y5ytuqvgx3m2.amplifyapp.com`** (Job ID 1 - `SUCCEED`).
 
 
