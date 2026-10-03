@@ -35,6 +35,12 @@ from agents.vigia import generar_alertas
 from services.chat import generar_respuesta_chat_stream
 from services.persistencia import persistencia_service
 from services.resolucion import resolver_nombres
+from services.telemetry import (
+    ctx_request_id,
+    emitir_bitacora_cadena_rota,
+    emitir_decision_humana,
+    log_evento,
+)
 
 # Configuración de Logging JSON estructurado
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -74,6 +80,7 @@ app.add_middleware(
 async def logging_and_request_id_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or f"req-{uuid.uuid4().hex[:12]}"
     request.state.request_id = request_id
+    ctx_request_id.set(request_id)
     start_time = time.perf_counter()
 
     response: Response = await call_next(request)
@@ -81,16 +88,16 @@ async def logging_and_request_id_middleware(request: Request, call_next):
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     response.headers["x-request-id"] = request_id
 
-    log_entry = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "request_id": request_id,
-        "method": request.method,
-        "path": request.url.path,
-        "status_code": response.status_code,
-        "duration_ms": duration_ms,
-        "client": request.client.host if request.client else "unknown",
-    }
-    logger.info(json.dumps(log_entry))
+    log_evento(
+        nivel="INFO",
+        evento="http.request_completado",
+        agente="api",
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+        client=request.client.host if request.client else "unknown",
+    )
     return response
 
 
@@ -436,6 +443,16 @@ def tomar_decision_endpoint(
             decision=decision,
             version_previa=version_previa,
         )
+        dec_str = str(decision.decision)
+        emitir_decision_humana(dec_str)
+        log_evento(
+            nivel="INFO",
+            evento="hitl.decision_aplicada",
+            agente="hitl",
+            alerta_id=alerta_id,
+            decision=dec_str,
+            actor=decision.decidido_por,
+        )
         response.headers["ETag"] = f'"{alerta_final.version}"'
         return {
             "alerta": alerta_final.model_dump(mode="json"),
@@ -463,7 +480,19 @@ def consultar_bitacora(
 ):
     """Consulta la cadena inmutable de bitácora para una alerta dada."""
     entradas = persistencia_service.obtener_bitacora(alerta_id)
-    cadena_valida = verificar_cadena(entradas) if (verificar and entradas) else True
+    if verificar and entradas:
+        cadena_valida = verificar_cadena(entradas)
+        if not cadena_valida:
+            emitir_bitacora_cadena_rota(tipo="sha256_o_secuencia_invalida")
+            log_evento(
+                nivel="CRITICAL",
+                evento="bitacora.cadena_rota",
+                agente="bitacora",
+                alerta_id=alerta_id,
+                tipo="sha256_o_secuencia_invalida",
+            )
+    else:
+        cadena_valida = True
 
     return {
         "alerta_id": alerta_id,

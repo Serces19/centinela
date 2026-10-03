@@ -42,6 +42,14 @@ from contracts.herramientas import (
 )
 from contracts.operacion import TrazaLLM
 from services.persistencia import persistencia_service
+from services.telemetry import (
+    emitir_llm_tokens,
+    emitir_pipeline_latencia,
+    emitir_reintentos_llm,
+    emitir_sin_evidencia,
+    emitir_validacion_fallida,
+    log_evento,
+)
 from tools.consultas import ejecutar_consulta_vista
 from tools.politicas import ejecutar_buscar_politica
 
@@ -280,6 +288,7 @@ async def analizar_alerta(alerta: Alerta, con: Any = None) -> tuple[DiagnosticoL
         return fallback_diag, []
 
     # Bucle de interacción Tool-Use
+    t_inicio = time.perf_counter()
     while llamadas_herramientas < max_llamadas and diagnostico_final is None:
         t0 = time.perf_counter()
         try:
@@ -431,6 +440,8 @@ async def analizar_alerta(alerta: Alerta, con: Any = None) -> tuple[DiagnosticoL
                         })
                     except (ValidationError, ValueError) as err:
                         logger.warning(f"Fallo de validación en emitir_diagnostico: {err}")
+                        emitir_validacion_fallida("analista")
+                        emitir_reintentos_llm("analista")
                         if reintentos_validacion < 1:
                             reintentos_validacion += 1
                             tool_results.append({
@@ -507,5 +518,29 @@ async def analizar_alerta(alerta: Alerta, con: Any = None) -> tuple[DiagnosticoL
             evidencia_suficiente=False,
             confianza=0.3,
         )
+
+    # Emitir métricas EMF y telemetría del Analista
+    latencia_total_ms = (time.perf_counter() - t_inicio) * 1000.0
+    emitir_pipeline_latencia("analista", latencia_total_ms)
+
+    tokens_in_tot = sum(t.tokens_in for t in trazas)
+    tokens_out_tot = sum(t.tokens_out for t in trazas)
+    costo_usd_tot = sum(t.costo_usd for t in trazas)
+    emitir_llm_tokens("analista", tokens_in_tot, tokens_out_tot, costo_usd_tot)
+
+    if not diagnostico_final.evidencia_suficiente:
+        emitir_sin_evidencia("analista")
+
+    log_evento(
+        "INFO",
+        "analista.analisis_completado",
+        agente="analista",
+        alerta_id=alerta.alerta_id,
+        latencia_ms=round(latencia_total_ms, 2),
+        tokens_in=tokens_in_tot,
+        tokens_out=tokens_out_tot,
+        costo_usd=round(costo_usd_tot, 6),
+        evidencia_suficiente=diagnostico_final.evidencia_suficiente,
+    )
 
     return diagnostico_final, trazas

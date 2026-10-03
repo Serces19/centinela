@@ -48,6 +48,11 @@ from contracts.alertas import Alerta
 from contracts.base import AccionId, AlertaId, Kpi, SCHEMA_VERSION
 from contracts.operacion import TrazaLLM
 from services.persistencia import persistencia_service
+from services.telemetry import (
+    emitir_llm_tokens,
+    emitir_pipeline_latencia,
+    log_evento,
+)
 from tools.impacto import calcular_impacto_economico
 
 logger = logging.getLogger("centinela.agente.estratega")
@@ -319,6 +324,7 @@ async def generar_propuesta(
     }
 
     acciones_llm: list[AccionLLM] = []
+    t_inicio = time.perf_counter()
 
     if bedrock_client is not None:
         t0 = time.perf_counter()
@@ -416,5 +422,26 @@ async def generar_propuesta(
 
     # Persistir propuesta en centinela_alertas (tipo_registro = 'PROPUESTA')
     persistencia_service.guardar_propuesta(propuesta_final)
+
+    # Emitir métricas EMF y telemetría del Estratega
+    latencia_total_ms = (time.perf_counter() - t_inicio) * 1000.0
+    emitir_pipeline_latencia("estratega", latencia_total_ms)
+
+    tokens_in_tot = sum(t.tokens_in for t in trazas)
+    tokens_out_tot = sum(t.tokens_out for t in trazas)
+    costo_usd_tot = sum(t.costo_usd for t in trazas)
+    emitir_llm_tokens("estratega", tokens_in_tot, tokens_out_tot, costo_usd_tot)
+
+    log_evento(
+        "INFO",
+        "estratega.propuesta_generada",
+        agente="estratega",
+        alerta_id=alerta.alerta_id,
+        total_acciones=len(acciones_finales),
+        latencia_ms=round(latencia_total_ms, 2),
+        tokens_in=tokens_in_tot,
+        tokens_out=tokens_out_tot,
+        costo_usd=round(costo_usd_tot, 6),
+    )
 
     return propuesta_final, trazas

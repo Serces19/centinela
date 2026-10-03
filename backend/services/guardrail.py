@@ -22,6 +22,8 @@ import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
+from services.telemetry import emitir_guardrail_intervino, log_evento
+
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 logger = logging.getLogger(__name__)
@@ -184,6 +186,16 @@ def aplicar_guardrail(
     final_action: Literal["NONE", "GUARDRAIL_INTERVENED"] = (
         "GUARDRAIL_INTERVENED" if final_intervino else "NONE"
     )
+
+    if final_intervino:
+        tipo_intervencion = "ataque" if final_ataque else "pii"
+        emitir_guardrail_intervino(tipo=tipo_intervencion)
+        log_evento(
+            "WARNING" if final_ataque else "INFO",
+            "guardrail.intervencion_detectada",
+            agente="guardrail",
+            tipo=tipo_intervencion,
+        )
 
     return ResultadoGuardrail(
         texto=texto_local,

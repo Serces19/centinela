@@ -1,0 +1,77 @@
+name: Centinela CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      run_promptfoo:
+        description: 'Ejecutar evaluación de seguridad promptfoo con Bedrock (consume API)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  backend-tests:
+    name: Backend Pytest & Contratos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Configurar Python
+        run: uv python install 3.12
+
+      - name: Instalar dependencias
+        run: uv pip install -e backend
+
+      - name: Ejecutar Test Suite Completo
+        run: uv run pytest -v
+
+  infra-validation:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.0
+
+      - name: Terraform Init & Validate
+        run: |
+          cd infra
+          terraform init -backend=false
+          terraform validate
+
+  promptfoo-eval:
+    name: Promptfoo Security & Regression (EJ-03)
+    if: ${{ github.event.inputs.run_promptfoo == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configurar Credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Ejecutar promptfoo
+        run: npx promptfoo eval -c evals/promptfoo.yaml

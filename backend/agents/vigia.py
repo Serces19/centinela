@@ -22,6 +22,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 import hashlib
 import statistics
+import time
 import uuid
 from typing import Any
 
@@ -39,6 +40,11 @@ from contracts.base import (
 )
 from contracts.herramientas import CalcularImpactoIn
 from semantic.db import FECHA_CORTE_DEFECTO, get_duckdb_connection
+from services.telemetry import (
+    emitir_alertas_generadas,
+    emitir_pipeline_latencia,
+    log_evento,
+)
 from tools.impacto import calcular_impacto
 
 # Orden de precedencia de severidad
@@ -490,9 +496,14 @@ def generar_alertas(corte: date, con: Any = None) -> list[Alerta]:
     - Determina la severidad máxima del grupo.
     - Suma o consolida el dinero en riesgo total de la causa.
     - Ordena las alertas por `dinero_en_riesgo_cop` DESCENDENTE.
+    - Emite métricas CloudWatch EMF (PipelineLatenciaMs y AlertasGeneradas).
     """
+    inicio = time.perf_counter()
     hallazgos = detectar_hallazgos(corte, con=con)
     if not hallazgos:
+        latencia_ms = (time.perf_counter() - inicio) * 1000.0
+        emitir_pipeline_latencia("vigia", latencia_ms)
+        log_evento("INFO", "vigia.cero_hallazgos", agente="vigia", corte=corte.isoformat(), latencia_ms=round(latencia_ms, 2))
         return []
 
     grupos: dict[str, list[Hallazgo]] = defaultdict(list)
@@ -530,7 +541,20 @@ def generar_alertas(corte: date, con: Any = None) -> list[Alerta]:
             version=1,
         )
         alertas.append(alerta)
+        kpi_nombre = items[0].kpi.value if items else huella.split("|")[0]
+        emitir_alertas_generadas(kpi=kpi_nombre, severidad=alerta.severidad.value, count=1)
 
     # Ordenar por dinero en riesgo descendente (prioridad comercial/financiera)
     alertas.sort(key=lambda a: a.dinero_en_riesgo_cop, reverse=True)
+
+    latencia_ms = (time.perf_counter() - inicio) * 1000.0
+    emitir_pipeline_latencia("vigia", latencia_ms)
+    log_evento(
+        "INFO",
+        "vigia.alertas_generadas",
+        agente="vigia",
+        corte=corte.isoformat(),
+        total_alertas=len(alertas),
+        latencia_ms=round(latencia_ms, 2),
+    )
     return alertas

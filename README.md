@@ -88,5 +88,13 @@ set SEMILLA=12 && uv run python Kit_Equipos/generador/generar_dataset.py
   - **Visor de Bitácora Inmutable:** Verificación matemática de la cadena SHA-256 con sello verde de integridad.
   - **Panel de Costo & ROI:** Métricas de inferencia con Claude Haiku 4.5 en Bedrock frente a capital protegido.
   - **Hosting en la Nube:** Desplegado en **AWS Amplify Hosting**: **`https://main.d1y5ytuqvgx3m2.amplifyapp.com`** (Job ID 1 - `SUCCEED`).
+- **Fase 3b (Monitorización, Observabilidad y CloudWatch EMF):** Completada al 100%.
+  - **Logging Estructurado JSON:** Servicio `backend/services/telemetry.py` con propagación de `x-request-id`, trazabilidad distribuida y sanitización estricta anti-PII.
+  - **CloudWatch Embedded Metric Format (EMF):** Emisión asíncrona a costo marginal cero en namespace `Centinela` (`AlertasGeneradas`, `PipelineLatenciaMs`, `LlmTokensEntrada/Salida`, `CostoUsdPorAlerta`, `ValidacionFallida`, `ReintentosLlm`, `SinEvidencia`, `GuardrailIntervino`, `BitacoraCadenaRota`, `AprobacionesHumanas`, `Rechazos`).
+  - **Dashboard Operativo en AWS:** Recurso `aws_cloudwatch_dashboard.operaciones` (`Centinela-Operaciones`) desplegado en `us-east-1` con widgets de severidad, latencias p50/p95, consumo de tokens, intervenciones de seguridad e integridad SHA-256.
+  - **Alarmas y Notificaciones SNS:** Tópico `centinela-alarmas-operaciones` con suscripción por correo electrónico y 4 alarmas métricas (Ruptura de Bitácora, Latencia p95 > 20s, Prompt Injections y Errores Lambda).
+  - **Evaluación de Seguridad promptfoo:** Configuración en `evals/promptfoo.yaml` con proveedor Bedrock Haiku 4.5 para casos EJ-03 (inyecciones de prompt, políticas adulteradas y fuga de prompt de sistema).
+  - **Pipeline CI:** Workflow GitHub Actions en `.github/workflows/ci.yml` para ejecución de suite completa (`pytest`), validación de Terraform (`terraform validate`) y disparador manual de `promptfoo`.
+  - **Suite de Pruebas:** **94 / 94 tests pasando al 100%** (`uv run pytest`).
 
 

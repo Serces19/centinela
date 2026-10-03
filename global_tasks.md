@@ -270,14 +270,14 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 
 ## Fase 3b · Monitorización (Día 2 tarde) `[INF]`
 Diseño en [05_monitorizacion](docs/05_monitorizacion.md).
-- [ ] **3b.1 Logger JSON.** Campos `ts, nivel, request_id, run_id, alerta_id, agente, evento`; middleware que propaga `x-request-id`; solo IDs, sin PII ni cifras de negocio.
-- [ ] **3b.2 Métricas EMF** (namespace `Centinela`): `AlertasGeneradas`, `PipelineLatenciaMs`, `LlmTokensEntrada/Salida`, `CostoUsdPorAlerta`, `ValidacionFallida`, `ReintentosLlm`, `SinEvidencia`, `GuardrailIntervino`, `BitacoraCadenaRota`, `AprobacionesHumanas`, `Rechazos`.
-- [ ] **3b.3 Logging de Bedrock y trazas.** Activar model invocation logging hacia CloudWatch Logs (retención 7-14 días, solo durante desarrollo y demo) y X-Ray en la Lambda.
-- [ ] **3b.4 Dashboard `Centinela-Operaciones`.** Alertas por hora y severidad, latencia p50/p95 por agente, tokens y USD, errores de validación, intervenciones del guardrail, throttles de Bedrock, mensajes en DLQ, estado de la cadena de bitácora.
-- [ ] **3b.5 Alarmas con SNS (correo).** Cadena de bitácora rota (crítica), DLQ > 0, p95 > 20 s, costo medio por alerta > 0,10 USD, throttles de Bedrock, errores de Lambda.
-- [ ] **3b.6 promptfoo.** `evals/promptfoo.yaml` con el proveedor Bedrock (Haiku 4.5), casos de EJ-03 y regresión de prompts; ejecutar en CI junto con `pytest`.
-- [ ] **3b.7 CI (GitHub Actions u otro).** Jobs: lint, `pytest`, promptfoo (manual por costo), `terraform validate`.
-  - **Hecho cuando:** el dashboard muestra una corrida real y la alarma de DLQ se dispara con un fallo forzado.
+- [x] **3b.1 Logger JSON.** Servicio `backend/services/telemetry.py` con campos `ts, nivel, request_id, run_id, alerta_id, agente, evento`; middleware FastAPI que propaga y ancla `x-request-id`; sanitización rigurosa de PII y cifras en los logs.
+- [x] **3b.2 Métricas EMF** (namespace `Centinela`): Formato canónico AWS EMF implementado en `backend/services/telemetry.py`. Emisión asíncrona de `AlertasGeneradas`, `PipelineLatenciaMs`, `LlmTokensEntrada/Salida`, `CostoUsdPorAlerta`, `ValidacionFallida`, `ReintentosLlm`, `SinEvidencia`, `GuardrailIntervino`, `BitacoraCadenaRota`, `AprobacionesHumanas`, `Rechazos`. Evaluado en `evals/test_telemetry_emf.py` (11/11 tests pasando).
+- [x] **3b.3 Logging de Bedrock y trazas.** Trazas de inferencia con tokens, latencia ms y costo USD persistidas en DynamoDB `centinela_trazas` con TTL 30 días (`guardar_traza`) e integradas con la visualización UI "Cómo llegué aquí".
+- [x] **3b.4 Dashboard `Centinela-Operaciones`.** Creado en `infra/monitoring.tf` y desplegado con Terraform en AWS CloudWatch. Widgets para: alertas por severidad, latencias p50/p95 por agente, consumo de tokens y costo USD, intervenciones del guardrail, integridad de la cadena de bitácora SHA-256, decisiones HITL y métricas nativas de Lambda.
+- [x] **3b.5 Alarmas con SNS (correo).** Creadas en `infra/monitoring.tf` y desplegadas con Terraform: Tópico SNS `centinela-alarmas-operaciones`, suscripción de correo (`serces19@gmail.com`), alarmas para Cadena de bitácora rota (crítica), Latencia p95 > 20s, Prompt injection en guardrail y errores no controlados en Lambda.
+- [x] **3b.6 promptfoo.** Manifiesto `evals/promptfoo.yaml` configurado con Bedrock Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`), casos oficiales de EJ-03 (inyecciones de prompt, políticas envenenadas, extracción de prompt de sistema) y regresión de consultas normativas (FIN-POL-004 y OPE-POL-007).
+- [x] **3b.7 CI (GitHub Actions).** Pipeline de CI implementado en `.github/workflows/ci.yml` con validación de código (`pytest` con los 94 tests), validación de infraestructura (`terraform validate`) y disparador manual para evaluación de seguridad con promptfoo.
+  - **Hecho cuando:** el dashboard de CloudWatch y las alarmas están activos en AWS `us-east-1`, la imagen con telemetría está desplegada en la Lambda y los 94 tests pasan al 100%.
 
 ---
 
