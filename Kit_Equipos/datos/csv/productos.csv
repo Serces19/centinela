@@ -1,0 +1,201 @@
+sku,nombre,linea,proveedor_id,clase_abc,unidad
+P0001,Juego de ollas x3 (HOG-01),Hogar,PR08,A,UND
+P0002,Sartén antiadherente 1 kg (HOG-02),Hogar,PR20,A,UND
+P0003,Toalla de baño 250 g (HOG-03),Hogar,PR25,C,UND
+P0004,Juego de sábanas 3 L (HOG-04),Hogar,PR29,A,UND
+P0005,Recipiente hermético x1 (HOG-05),Hogar,PR31,B,UND
+P0006,Escoba x12 (HOG-06),Hogar,PR08,A,UND
+P0007,Trapero 1 L (HOG-07),Hogar,PR20,A,UND
+P0008,Organizador plástico x6 (HOG-08),Hogar,PR25,A,UND
+P0009,Vaso de vidrio x6 x12 (HOG-09),Hogar,PR29,A,UND
+P0010,Cuchillo de cocina 2 kg (HOG-10),Hogar,PR31,C,UND
+P0011,Juego de ollas x12 (HOG-11),Hogar,PR08,A,UND
+P0012,Sartén antiadherente 3 L (HOG-12),Hogar,PR20,C,UND
+P0013,Toalla de baño x1 (HOG-13),Hogar,PR25,A,UND
+P0014,Juego de sábanas 400 ml (HOG-14),Hogar,PR29,A,UND
+P0015,Recipiente hermético 1 kg (HOG-15),Hogar,PR31,C,UND
+P0016,Escoba 400 ml (HOG-16),Hogar,PR08,A,UND
+P0017,Trapero 1.5 L (HOG-17),Hogar,PR20,A,UND
+P0018,Organizador plástico 500 g (HOG-18),Hogar,PR25,B,UND
+P0019,Vaso de vidrio x6 x6 (HOG-19),Hogar,PR29,B,UND
+P0020,Cuchillo de cocina x3 (HOG-20),Hogar,PR31,A,UND
+P0021,Juego de ollas x1 (HOG-21),Hogar,PR08,A,UND
+P0022,Sartén antiadherente 500 g (HOG-22),Hogar,PR20,A,UND
+P0023,Toalla de baño 1.5 L (HOG-23),Hogar,PR25,A,UND
+P0024,Juego de sábanas 250 g (HOG-24),Hogar,PR29,A,UND
+P0025,Recipiente hermético 2 kg (HOG-25),Hogar,PR31,A,UND
+P0026,Escoba 1.5 L (HOG-26),Hogar,PR08,A,UND
+P0027,Trapero x6 (HOG-27),Hogar,PR20,A,UND
+P0028,Organizador plástico x1 (HOG-28),Hogar,PR25,A,UND
+P0029,Vaso de vidrio x6 x12 (HOG-29),Hogar,PR29,B,UND
+P0030,Cuchillo de cocina 2 kg (HOG-30),Hogar,PR31,A,UND
+P0031,Detergente en polvo 1 kg (ASE-01),Aseo,PR02,A,UND
+P0032,Lavaloza líquido 2 kg (ASE-02),Aseo,PR09,A,UND
+P0033,Limpiador multiusos x6 (ASE-03),Aseo,PR13,B,UND
+P0034,Blanqueador 2 kg (ASE-04),Aseo,PR24,B,UND
+P0035,Suavizante 1 kg (ASE-05),Aseo,PR38,C,UND
+P0036,Desinfectante 2 kg (ASE-06),Aseo,PR02,A,UND
+P0037,Jabón de barra x3 (ASE-07),Aseo,PR09,A,UND
+P0038,Ambientador 2 kg (ASE-08),Aseo,PR13,C,UND
+P0039,Esponja x12 (ASE-09),Aseo,PR24,C,UND
+P0040,Bolsas de basura 1 L (ASE-10),Aseo,PR38,A,UND
+P0041,Detergente en polvo 400 ml (ASE-11),Aseo,PR02,C,UND
+P0042,Lavaloza líquido x1 (ASE-12),Aseo,PR09,B,UND
+P0043,Limpiador multiusos 2 kg (ASE-13),Aseo,PR13,C,UND
+P0044,Blanqueador x1 (ASE-14),Aseo,PR24,C,UND
+P0045,Suavizante x12 (ASE-15),Aseo,PR38,C,UND
+P0046,Desinfectante 1 L (ASE-16),Aseo,PR02,B,UND
+P0047,Jabón de barra x3 (ASE-17),Aseo,PR09,B,UND
+P0048,Ambientador x6 (ASE-18),Aseo,PR13,A,UND
+P0049,Esponja 400 ml (ASE-19),Aseo,PR24,C,UND
+P0050,Bolsas de basura 2 kg (ASE-20),Aseo,PR38,B,UND
+P0051,Detergente en polvo 1 kg (ASE-21),Aseo,PR02,A,UND
+P0052,Lavaloza líquido 250 g (ASE-22),Aseo,PR09,B,UND
+P0053,Limpiador multiusos 1 kg (ASE-23),Aseo,PR13,A,UND
+P0054,Blanqueador 1.5 L (ASE-24),Aseo,PR24,B,UND
+P0055,Suavizante 250 g (ASE-25),Aseo,PR38,B,UND
+P0056,Desinfectante 1.5 L (ASE-26),Aseo,PR02,B,UND
+P0057,Jabón de barra 2 kg (ASE-27),Aseo,PR09,A,UND
+P0058,Ambientador 2 kg (ASE-28),Aseo,PR13,B,UND
+P0059,Esponja 500 g (ASE-29),Aseo,PR24,C,UND
+P0060,Bolsas de basura x12 (ASE-30),Aseo,PR38,C,UND
+P0061,Detergente en polvo x12 (ASE-31),Aseo,PR02,A,UND
+P0062,Lavaloza líquido 2 kg (ASE-32),Aseo,PR09,C,UND
+P0063,Limpiador multiusos x12 (ASE-33),Aseo,PR13,C,UND
+P0064,Blanqueador 500 g (ASE-34),Aseo,PR24,C,UND
+P0065,Suavizante x1 (ASE-35),Aseo,PR38,B,UND
+P0066,Arroz 1 L (ALI-01),Alimentos,PR03,B,UND
+P0067,Aceite x6 (ALI-02),Alimentos,PR10,A,UND
+P0068,Pasta 250 g (ALI-03),Alimentos,PR11,C,UND
+P0069,Atún x3 (ALI-04),Alimentos,PR15,B,UND
+P0070,Café molido 1 L (ALI-05),Alimentos,PR22,C,UND
+P0071,Chocolate de mesa x6 (ALI-06),Alimentos,PR26,C,UND
+P0072,Galletas 1 L (ALI-07),Alimentos,PR27,C,UND
+P0073,Leche en polvo x3 (ALI-08),Alimentos,PR28,C,UND
+P0074,Harina de maíz 1 kg (ALI-09),Alimentos,PR32,A,UND
+P0075,Salsa de tomate 400 ml (ALI-10),Alimentos,PR34,A,UND
+P0076,Lentejas x1 (ALI-11),Alimentos,PR03,C,UND
+P0077,Azúcar 1 L (ALI-12),Alimentos,PR10,C,UND
+P0078,Arroz 3 L (ALI-13),Alimentos,PR11,C,UND
+P0079,Aceite 1 kg (ALI-14),Alimentos,PR15,B,UND
+P0080,Pasta 400 ml (ALI-15),Alimentos,PR22,C,UND
+P0081,Atún x6 (ALI-16),Alimentos,PR26,C,UND
+P0082,Café molido 2 kg (ALI-17),Alimentos,PR27,B,UND
+P0083,Chocolate de mesa x1 (ALI-18),Alimentos,PR28,B,UND
+P0084,Galletas x12 (ALI-19),Alimentos,PR32,B,UND
+P0085,Leche en polvo 3 L (ALI-20),Alimentos,PR34,A,UND
+P0086,Harina de maíz 500 g (ALI-21),Alimentos,PR03,C,UND
+P0087,Salsa de tomate x12 (ALI-22),Alimentos,PR10,C,UND
+P0088,Lentejas 3 L (ALI-23),Alimentos,PR11,A,UND
+P0089,Azúcar 2 kg (ALI-24),Alimentos,PR15,B,UND
+P0090,Arroz 1.5 L (ALI-25),Alimentos,PR22,B,UND
+P0091,Aceite x1 (ALI-26),Alimentos,PR26,C,UND
+P0092,Pasta 250 g (ALI-27),Alimentos,PR27,B,UND
+P0093,Atún 1.5 L (ALI-28),Alimentos,PR28,B,UND
+P0094,Café molido x6 (ALI-29),Alimentos,PR32,C,UND
+P0095,Chocolate de mesa x6 (ALI-30),Alimentos,PR34,A,UND
+P0096,Galletas x12 (ALI-31),Alimentos,PR03,B,UND
+P0097,Leche en polvo x1 (ALI-32),Alimentos,PR10,B,UND
+P0098,Harina de maíz 3 L (ALI-33),Alimentos,PR11,A,UND
+P0099,Salsa de tomate x1 (ALI-34),Alimentos,PR15,B,UND
+P0100,Lentejas 3 L (ALI-35),Alimentos,PR22,A,UND
+P0101,Azúcar x1 (ALI-36),Alimentos,PR26,C,UND
+P0102,Arroz x3 (ALI-37),Alimentos,PR27,C,UND
+P0103,Aceite 1.5 L (ALI-38),Alimentos,PR28,C,UND
+P0104,Pasta 1.5 L (ALI-39),Alimentos,PR32,C,UND
+P0105,Atún 500 g (ALI-40),Alimentos,PR34,B,UND
+P0106,Café molido 400 ml (ALI-41),Alimentos,PR03,B,UND
+P0107,Chocolate de mesa 3 L (ALI-42),Alimentos,PR10,B,UND
+P0108,Galletas 1 L (ALI-43),Alimentos,PR11,A,UND
+P0109,Leche en polvo x6 (ALI-44),Alimentos,PR15,B,UND
+P0110,Harina de maíz 250 g (ALI-45),Alimentos,PR22,C,UND
+P0111,Gaseosa 250 g (BEB-01),Bebidas,PR04,B,UND
+P0112,Agua sin gas 500 g (BEB-02),Bebidas,PR16,B,UND
+P0113,Jugo de naranja x12 (BEB-03),Bebidas,PR23,A,UND
+P0114,Bebida energizante x6 (BEB-04),Bebidas,PR04,C,UND
+P0115,Té helado 2 kg (BEB-05),Bebidas,PR16,C,UND
+P0116,Malta 1 kg (BEB-06),Bebidas,PR23,C,UND
+P0117,Agua con gas x6 (BEB-07),Bebidas,PR04,C,UND
+P0118,Bebida isotónica 1.5 L (BEB-08),Bebidas,PR16,A,UND
+P0119,Gaseosa 3 L (BEB-09),Bebidas,PR23,A,UND
+P0120,Agua sin gas 500 g (BEB-10),Bebidas,PR04,C,UND
+P0121,Jugo de naranja 1.5 L (BEB-11),Bebidas,PR16,C,UND
+P0122,Bebida energizante 400 ml (BEB-12),Bebidas,PR23,B,UND
+P0123,Té helado 1 L (BEB-13),Bebidas,PR04,C,UND
+P0124,Malta 250 g (BEB-14),Bebidas,PR16,C,UND
+P0125,Agua con gas x3 (BEB-15),Bebidas,PR23,C,UND
+P0126,Bebida isotónica 3 L (BEB-16),Bebidas,PR04,B,UND
+P0127,Gaseosa 500 g (BEB-17),Bebidas,PR16,C,UND
+P0128,Agua sin gas x3 (BEB-18),Bebidas,PR23,B,UND
+P0129,Jugo de naranja 1 kg (BEB-19),Bebidas,PR04,C,UND
+P0130,Bebida energizante x12 (BEB-20),Bebidas,PR16,C,UND
+P0131,Té helado 250 g (BEB-21),Bebidas,PR23,C,UND
+P0132,Malta 1 kg (BEB-22),Bebidas,PR04,C,UND
+P0133,Agua con gas 1 L (BEB-23),Bebidas,PR16,C,UND
+P0134,Bebida isotónica 500 g (BEB-24),Bebidas,PR23,A,UND
+P0135,Gaseosa x1 (BEB-25),Bebidas,PR04,B,UND
+P0136,Agua sin gas 3 L (BEB-26),Bebidas,PR16,B,UND
+P0137,Jugo de naranja 1 kg (BEB-27),Bebidas,PR23,C,UND
+P0138,Bebida energizante 400 ml (BEB-28),Bebidas,PR04,C,UND
+P0139,Té helado 250 g (BEB-29),Bebidas,PR16,B,UND
+P0140,Malta 3 L (BEB-30),Bebidas,PR23,C,UND
+P0141,Agua con gas 400 ml (BEB-31),Bebidas,PR04,C,UND
+P0142,Bebida isotónica x12 (BEB-32),Bebidas,PR16,A,UND
+P0143,Gaseosa x6 (BEB-33),Bebidas,PR23,B,UND
+P0144,Agua sin gas x6 (BEB-34),Bebidas,PR04,C,UND
+P0145,Jugo de naranja 3 L (BEB-35),Bebidas,PR16,A,UND
+P0146,Shampoo x6 (CUI-01),Cuidado personal,PR05,A,UND
+P0147,Crema dental x3 (CUI-02),Cuidado personal,PR17,B,UND
+P0148,Desodorante x3 (CUI-03),Cuidado personal,PR35,C,UND
+P0149,Jabón líquido x1 (CUI-04),Cuidado personal,PR40,C,UND
+P0150,Crema corporal x1 (CUI-05),Cuidado personal,PR05,C,UND
+P0151,Pañales 400 ml (CUI-06),Cuidado personal,PR17,A,UND
+P0152,Toallas higiénicas 1 kg (CUI-07),Cuidado personal,PR35,B,UND
+P0153,Protector solar x12 (CUI-08),Cuidado personal,PR40,A,UND
+P0154,Shampoo x12 (CUI-09),Cuidado personal,PR05,A,UND
+P0155,Crema dental x12 (CUI-10),Cuidado personal,PR17,A,UND
+P0156,Desodorante 250 g (CUI-11),Cuidado personal,PR35,B,UND
+P0157,Jabón líquido 500 g (CUI-12),Cuidado personal,PR40,A,UND
+P0158,Crema corporal x12 (CUI-13),Cuidado personal,PR05,C,UND
+P0159,Pañales x1 (CUI-14),Cuidado personal,PR17,A,UND
+P0160,Toallas higiénicas 2 kg (CUI-15),Cuidado personal,PR35,B,UND
+P0161,Protector solar 3 L (CUI-16),Cuidado personal,PR40,A,UND
+P0162,Shampoo 250 g (CUI-17),Cuidado personal,PR05,A,UND
+P0163,Crema dental 250 g (CUI-18),Cuidado personal,PR17,A,UND
+P0164,Desodorante 400 ml (CUI-19),Cuidado personal,PR35,B,UND
+P0165,Jabón líquido x12 (CUI-20),Cuidado personal,PR40,A,UND
+P0166,Crema corporal x12 (CUI-21),Cuidado personal,PR05,B,UND
+P0167,Pañales 1 kg (CUI-22),Cuidado personal,PR17,A,UND
+P0168,Toallas higiénicas 250 g (CUI-23),Cuidado personal,PR35,A,UND
+P0169,Protector solar 500 g (CUI-24),Cuidado personal,PR40,B,UND
+P0170,Shampoo x12 (CUI-25),Cuidado personal,PR05,B,UND
+P0171,Crema dental 1 kg (CUI-26),Cuidado personal,PR17,C,UND
+P0172,Desodorante 3 L (CUI-27),Cuidado personal,PR35,A,UND
+P0173,Jabón líquido 2 kg (CUI-28),Cuidado personal,PR40,B,UND
+P0174,Crema corporal 500 g (CUI-29),Cuidado personal,PR05,C,UND
+P0175,Pañales x1 (CUI-30),Cuidado personal,PR17,A,UND
+P0176,Concentrado perro adulto 2 kg (MAS-01),Mascotas,PR07,A,UND
+P0177,Concentrado gato 2 kg (MAS-02),Mascotas,PR18,A,UND
+P0178,Snack para perro 2 kg (MAS-03),Mascotas,PR07,B,UND
+P0179,Arena para gato 3 L (MAS-04),Mascotas,PR18,A,UND
+P0180,Shampoo para mascotas x12 (MAS-05),Mascotas,PR07,A,UND
+P0181,Concentrado perro adulto 1 L (MAS-06),Mascotas,PR18,A,UND
+P0182,Concentrado gato 1 L (MAS-07),Mascotas,PR07,B,UND
+P0183,Snack para perro x1 (MAS-08),Mascotas,PR18,A,UND
+P0184,Arena para gato x6 (MAS-09),Mascotas,PR07,B,UND
+P0185,Shampoo para mascotas 2 kg (MAS-10),Mascotas,PR18,A,UND
+P0186,Concentrado perro adulto 250 g (MAS-11),Mascotas,PR07,A,UND
+P0187,Concentrado gato x12 (MAS-12),Mascotas,PR18,A,UND
+P0188,Snack para perro 3 L (MAS-13),Mascotas,PR07,A,UND
+P0189,Arena para gato 1 kg (MAS-14),Mascotas,PR18,B,UND
+P0190,Shampoo para mascotas x12 (MAS-15),Mascotas,PR07,A,UND
+P0191,Cuaderno x3 (PAP-01),Papelería,PR06,C,UND
+P0192,Resma de papel x1 (PAP-02),Papelería,PR19,C,UND
+P0193,Bolígrafos x12 x3 (PAP-03),Papelería,PR37,C,UND
+P0194,Marcadores 3 L (PAP-04),Papelería,PR06,B,UND
+P0195,Carpeta 3 L (PAP-05),Papelería,PR19,C,UND
+P0196,Cuaderno 2 kg (PAP-06),Papelería,PR37,C,UND
+P0197,Resma de papel 3 L (PAP-07),Papelería,PR06,C,UND
+P0198,Bolígrafos x12 2 kg (PAP-08),Papelería,PR19,C,UND
+P0199,Marcadores 1 L (PAP-09),Papelería,PR37,C,UND
+P0200,Carpeta x6 (PAP-10),Papelería,PR06,B,UND

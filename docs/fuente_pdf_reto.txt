@@ -1,0 +1,521 @@
+===== Hackathon By Paseo.pptx.pdf
+--- page 1
+HACKATÓN BY PASEO · 3 DÍAS ·
+Octubre de 2026
+AI School
+
+--- page 2
+Menú de contenido
+Haga clic en una sección para ir a ella; cada lámina tiene un botón para volver aquí.
+01
+El reto
+Resumen del reto · Por qué este 
+caso
+02
+El caso de uso
+Problema y usuarios · Los 4 
+agentes · Recorrido del usuario
+03
+Alcance y datos
+Alcance del MVP · Datos del reto · 
+Escenarios sembrados · Kit de 
+insumos
+04
+Solución técnica
+Arquitectura · Stack · Backend · 
+API y capa semántica · Frontend y 
+UX · Pantallas · IA responsable
+05
+Metodología y agenda
+Roles del equipo · Construcción 
+por capas · Agenda · Reglas y 
+definición de terminado
+06
+Evaluación
+Entregables · Criterios · Pruebas 
+del jurado
+07
+Comercialización
+Hoja de ruta · Modelo de negocio 
+y PI · Fuentes
+2
+--- page 3
+El reto
+01
+‹  Menú
+--- page 4
+En 3 días, cada equipo construye Centinela
+‹  Menú
+Un sistema de agentes de IA que vigila los datos del 
+negocio, detecta problemas antes de que cuesten 
+dinero, explica por qué pasan y propone (o ejecuta, con 
+aprobación humana) la acción para corregirlos.
+Es el paso de los tableros que alguien tiene que mirar a una operación 
+que se vigila sola. Todos los equipos usan el mismo dataset sintético, 
+con problemas sembrados que el jurado usa para probar cada solución.
+3
+días presenciales en la sede de On 
+Business
+4–5
+personas por equipo: negocio, datos, 
+backend y frontend
+6
+escenarios por descubrir: 5 anunciados y 1 
+oculto
+Resultado esperado
+MVP funcionando
+ Demo de 5 minutos
+ Pitch de negocio de 3 
+minutos
+4
+--- page 5
+El caso de uso
+02
+‹  Menú
+--- page 6
+Los 4 agentes: tres leen, solo uno actúa y únicamente tras 
+aprobación
+‹  Menú
+Vigía
+Revisa los KPIs y detecta 
+anomalías o tendencias 
+contra reglas y estadística
+“El margen de la línea Hogar 
+cayó 6 puntos en 3 semanas”
+Analista
+Investiga la causa raíz 
+cruzando datos y 
+consultando las políticas
+“La causa: el proveedor X subió 
+el costo de 4 SKU”
+Estratega
+Propone 1–3 acciones con 
+impacto en pesos y nivel de 
+confianza
+“Ajustar precio 3% en 4 SKU 
+recupera $42 M/mes”
+Ejecutor
+Ejecuta la acción aprobada 
+con herramientas permitidas 
+y deja registro
+Correo en borrador, tarea, 
+orden en borrador
+Aprobación 
+humana
+Orquestador: coordina a los agentes, guarda el estado de cada alerta y detiene el flujo antes de toda acción con efecto 
+externo.
+6
+--- page 7
+El recorrido del usuario: del aviso a la decisión en minutos
+‹  Menú
+1
+Abre la bandeja
+Ve sus decisiones 
+ordenadas por pesos en 
+riesgo.
+2
+Abre una alerta
+Qué pasó, por qué (con 
+evidencia), qué se 
+propone y cuánto vale.
+3
+Pregunta
+Profundiza en lenguaje 
+natural: “¿qué otros 
+clientes compran esos 
+SKU?”
+4
+Decide
+Aprueba, edita o rechaza. 
+Si rechaza, explica por 
+qué y Centinela aprende.
+5
+Queda registrado
+El Ejecutor actúa y todo 
+queda en la bitácora de 
+auditoría.
+Principio: el usuario no busca el problema; el problema llega a él, explicado y con una propuesta lista para aprobar.
+7
+--- page 8
+Alcance y datos
+Qué debe funcionar y con qué datos se prueba03
+‹  Menú
+--- page 9
+Alcance del MVP:
+‹  Menú
+Base
+Obligatorio
+• Vigía detecta al menos 3 de los 5 
+escenarios
+• Analista explica la causa con 
+evidencia
+• Bandeja con aprobar / rechazar
+• Chat para preguntar sobre los datos
+• Bitácora de cada decisión
+Fuera de alcance: conexión a 
+sistemas reales de clientes, 
+autenticación empresarial 
+completa y despliegue productivo 
+(van en el pitch como hoja de 
+ruta).
+9
+--- page 10
+Datos del reto: 12 meses de una distribuidora ficticia
+‹  Menú
+269.595
+filas en 15 tablas
+12
+meses: oct 2025 – sep 2026
+≈ $23.500 M
+en ventas netas (COP)
+CSV + SQL
+PostgreSQL listo para usar
+Tabla Contenido Filas
+clientes Segmento, ciudad, cupo, plazo 500
+vendedores Fuerza de ventas por región 25
+productos SKU, línea, proveedor, clase ABC 200
+proveedores Lead time y país 40
+lista_precios · costos_proveedor Precios y costos con vigencias 2.804
+ordenes_compra OC a proveedores, retrasos 3.802
+pedidos Encabezado, canal y estado 20.013
+pedidos_detalle Cantidad, precio, descuento, costo 60.103
+facturas · pagos Cartera: vencimientos y pagos 36.095
+inventario_diario Existencias por SKU, bodega y día 146.000
+politicas/ (PDF) Crédito, descuentos, inventario (RAG) 3
+10
+--- page 11
+Kit de insumos: todo lo necesario para empezar en 5 minutos
+‹  Menú
+Centinela_Kit_Equipos.zip
+datos/csv/ 15 tablas en CSV (UTF-8)
+datos/sql/01_esquema.sql Tablas en PostgreSQL
+datos/sql/02_carga.sql Carga de los CSV
+datos/sql/03_capa_semantica.sql 7 vistas de métricas
+datos/metricas.yaml Definición única de KPIs
+politicas/ 3 políticas en PDF
+diccionario_de_datos.xlsx Campos, tipos y ejemplos
+evaluaciones/ Plantilla de casos de prueba
+generador/ Datasets alternativos
+README.md Guía de inicio
+Puesta en marcha
+createdb centinela 
+cd datos 
+psql -d centinela -f sql/01_esquema.sql 
+psql -d centinela -f sql/02_carga.sql 
+psql -d centinela -f sql/03_capa_semantica.sql 
+--- page 12
+Solución técnica
+Arquitectura, stack, backend, frontend e IA responsable04
+‹  Menú
+--- page 13
+Arquitectura de referencia
+‹  Menú
+Frontend · Next.js
+Bandeja de decisiones · Detalle · Chat · Bitácora · Configuración
+API · FastAPI
+REST + streaming (SSE) · reloj simulado · roles y permisos
+Orquestador de agentes · LangGraph
+Vigía Analista Estratega Ejecutor
+aprobación
+Herramientas · servidores MCP
+SQL de solo lectura sobre vistas de métricas · búsqueda en políticas (RAG) · acciones en borrador o sandbox
+Datos
+PostgreSQL (dataset + capa semántica) · pgvector (políticas) · bitácora inmutable
+Modelos de lenguaje
+Claude u otro, vía API. Uno grande 
+para razonar, uno rápido para 
+clasificar.
+Observabilidad
+Langfuse (trazas) · promptfoo 
+(pruebas)
+Los agentes leen con 
+herramientas controladas; 
+solo el Ejecutor actúa, y tras 
+aprobación humana.
+13
+--- page 14
+Stack recomendado (los equipos pueden cambiar piezas si lo 
+justifican)
+‹  Menú
+Capa Recomendado Alternativas válidas
+Modelos de lenguaje Claude: un modelo grande para razonar, uno rápido para 
+clasificar GPT, Gemini; modelos abiertos vía Ollama
+Orquestación de agentes LangGraph (estado y pausa para aprobación humana) Claude Agent SDK, OpenAI Agents SDK, ADK, CrewAI
+Herramientas Servidores MCP: SQL de solo lectura, políticas, acciones Function calling nativo del modelo
+Datos PostgreSQL + pgvector DuckDB para análisis local
+Detección de anomalías Reglas de negocio + estadística (z-score, tendencia) scikit-learn (Isolation Forest), Prophet
+Backend Python + FastAPI + Pydantic Node.js + Hono / NestJS
+Frontend Next.js + React + Tailwind + shadcn/ui + Recharts Streamlit solo para prototipo (baja la nota de UX)
+Observabilidad y evaluaciones Langfuse + promptfoo LangSmith, Arize Phoenix, Ragas
+Despliegue Docker Compose; demo en Cloud Run, Render o Vercel Local con túnel seguro
+Regla de oro: los números los calcula SQL o Python; el modelo razona, explica y redacta, nunca inventa cifras.
+14
+--- page 15
+Backend: cifras correctas, acciones controladas y costo 
+predecible
+‹  Menú
+Capa semántica
+KPIs definidos una vez como 
+vistas SQL; los agentes no 
+consultan tablas crudas.
+Reloj simulado
+Endpoint para avanzar día a día: el 
+jurado adelanta la operación y ve 
+aparecer las alertas.
+Ciclo de vida
+Nueva → en análisis → propuesta 
+→ aprobada o rechazada → 
+ejecutada, con estado persistido.
+Aprobación humana
+El flujo se detiene antes de 
+cualquier acción externa; sin 
+aprobación no hay acción.
+Acciones seguras
+Lista cerrada de herramientas, 
+idempotentes, en borrador o 
+sandbox.
+Priorización
+Alertas ordenadas por pesos en 
+riesgo; una misma causa no 
+genera 10 alertas.
+Costo y latencia
+Modelo rápido para lo simple, 
+caché, tope de tokens y costo 
+registrado por alerta.
+Robustez
+Reintentos, timeouts y “no tengo 
+evidencia suficiente” como 
+respuesta válida.
+15
+--- page 16
+API y capa semántica incluidas en el kit
+‹  Menú
+API mínima
+POST /simulacion/avanzar?dias=1
+mueve el reloj y dispara al Vigía
+GET /alertas?estado=propuesta
+bandeja de decisiones
+GET /alertas/{id}
+causa, evidencia y acciones
+POST /alertas/{id}/decision
+aprobar, editar o rechazar + motivo
+POST /chat
+preguntas en lenguaje natural (streaming)
+GET /bitacora
+auditoría de decisiones y acciones
+Vistas de métricas (PostgreSQL)
+v_ventas
+Ventas netas con costo y margen por línea de pedido
+v_margen_semanal_linea
+Margen semanal por línea de producto
+v_cartera_cliente
+Saldo abierto, vencido y días de pago por cliente
+v_dias_pago_mensual
+Tendencia de días de pago por mes de factura
+v_cobertura_inventario
+Cobertura en días y unidades pendientes por SKU y bodega
+v_descuentos_fuera_politica
+Líneas sobre el tope y descuento en exceso
+v_actividad_cliente
+Días sin comprar frente al intervalo habitual
+fecha_corte() devuelve el último día del dataset; con el reloj simulado se reemplaza por el día simulado.
+16
+--- page 17
+Frontend y UX: una bandeja de decisiones, no un tablero
+‹  Menú
+Alta Margen · línea Hogar Confianza alta · hoy 7:00 a. m.
+El margen de la línea Hogar cayó 6 puntos en 3 
+semanas
+$42 M/mes recuperables
+POR QUÉ
+El proveedor X subió el costo de 4 SKU y el 
+precio de venta no se ajustó.
+PROPUESTA
+Ajustar el precio 3% en esos 4 SKU y 
+renegociar con el proveedor X.
+Aprobar Editar Rechazar Ver cómo llegué aquí ›
+Valor en 30 segundos
+Al entrar, el dinero en riesgo hoy y las 3 decisiones clave.
+Explicación en 3 niveles
+Una frase → evidencia → “cómo llegué aquí” con las consultas.
+El humano decide
+Aprobar, editar o rechazar a un clic; rechazar pide motivo.
+Confianza visible
+Supuestos y nivel de confianza; si duda, lo dice.
+Agentes a la vista
+Se ve el paso en curso mientras analizan.
+Lenguaje de negocio
+Pesos colombianos, fechas claras, cero jerga.
+Accesible y responsive
+Severidad no solo por color; teclado; celular.
+17
+--- page 18
+Pantallas del MVP
+‹  Menú
+Pantalla Para quién Qué muestra
+Bandeja de decisiones Gerente, líderes de proceso Alertas ordenadas por pesos en riesgo, con urgencia, confianza y acciones
+Detalle de alerta Líderes de proceso Qué pasó, causa con evidencia, acciones propuestas con impacto y 
+aprobación
+Chat anclado Todos Preguntas sobre la alerta o los datos; respuestas con cifra, gráfico y fuente
+Bitácora Auditoría, gerencia Quién aprobó qué, cuándo, qué ejecutó el agente y con qué resultado
+Configuración Analista KPIs vigilados, umbrales, responsables y nivel de autonomía por tipo de 
+acción
+Bandeja
+ Detalle
+ Chat
+ Bitácora
+ Configuración
+18
+--- page 19
+IA responsable: un agente que actúa solo se compra si se 
+puede controlar
+‹  Menú
+Riesgo Control mínimo exigido
+Cifras inventadas Todo número viene de una consulta registrada; la respuesta enlaza la consulta que lo produjo
+Acción no deseada Aprobación humana antes de toda acción externa; lista cerrada de herramientas; modo borrador
+Inyección de instrucciones Datos y documentos son datos, nunca órdenes; el jurado prueba un texto malicioso en una política
+Acceso indebido a datos Usuario de base de datos de solo lectura; roles por área
+Datos personales Enmascarar datos sensibles antes de enviarlos al modelo; Ley 1581 de protección de datos
+Falta de trazabilidad Bitácora inmutable: alerta, evidencia, propuesta, decisión, acción y resultado
+Degradación del agente Set de evaluación con los escenarios sembrados, ejecutado en cada cambio importante
+Informa Propone Ejecuta
+Niveles de autonomía por tipo de acción. En el hackatón todo 
+queda en “Propone”; la autonomía plena se gana en producción 
+con historial de aciertos.
+19
+--- page 20
+Éxitos… 
+Empieza ya a demostrar tus 
+capacidades!! 
+‹  Volver al menú
+AI School
+
+===== politicas/Politica_Credito_y_Cartera.pdf
+--- page 1
+Distribuidora Andina S.A.S. · documento ficticio para el hackatón Centinela
+Política de crédito y cartera
+Código FIN-POL-004 · Versión 3 · Vigente desde el 1 de enero de 2026 · Aprobó: Gerencia General
+1. Objetivo
+Definir las condiciones de crédito a clientes y el seguimiento de la cartera para proteger el flujo de caja.
+2. Plazos de pago por segmento
+ Segmento
+Plazo estándar
+Observación
+Grandes superficies
+60 días
+Según contrato marco
+Mayoristas
+45 días
+Clientes estratégicos pueden tener 30 días con descuento comercial
+Minoristas
+30 días
+Institucional
+45 días
+3. Cupo de crédito
+El cupo de crédito equivale aproximadamente a dos meses de compras promedio del cliente y lo revisa
+Cartera cada trimestre. Ningún pedido puede dejar el saldo abierto por encima del cupo sin aprobación de la
+Dirección Financiera.
+4. Seguimiento y escalamiento
+ Situación
+Acción
+Responsable
+1 a 15 días vencido
+Recordatorio de pago
+Analista de cartera
+16 a 30 días vencido
+Llamada y acuerdo de pago; alerta al vendedor
+Analista de cartera + vendedor
+31 a 60 días vencido
+Pedidos nuevos solo de contado
+Jefe de cartera
+Más de 60 días vencido
+Bloqueo de despachos y escalamiento a Dirección Financiera
+Dirección Financiera
+5. Señales de alerta temprana
+Se considera señal de alerta que un cliente aumente su tiempo promedio de pago en más de 50% frente a
+su histórico, aunque aún no supere el plazo, o que concentre más del 10% de la cartera vencida total.
+6. Comunicación con el cliente
+Toda comunicación de cobro debe ser cordial, por escrito y con copia al vendedor responsable. Los
+acuerdos de pago quedan registrados en el sistema.
+
+===== politicas/Politica_Descuentos_Comerciales.pdf
+--- page 1
+Distribuidora Andina S.A.S. · documento ficticio para el hackatón Centinela
+Política de descuentos comerciales
+Código COM-POL-002 · Versión 3 · Vigente desde el 1 de enero de 2026 · Aprobó: Gerencia General
+1. Objetivo
+Asegurar que los descuentos comerciales protejan la rentabilidad y se otorguen de forma consistente en
+todas las regiones.
+2. Topes de descuento por segmento
+ Segmento
+Tope sin aprobación
+Con aprobación especial
+Grandes superficies
+18%
+Hasta 21% (Gerencia Comercial)
+Mayoristas
+15%
+Hasta 18% (Gerencia Comercial)
+Minoristas
+10%
+Hasta 13% (Gerencia Comercial)
+Institucional
+12%
+Hasta 15% (Gerencia Comercial)
+3. Aprobación especial
+Cuando un negocio justifique un descuento superior al tope, el vendedor solicita aprobación a la Gerencia
+Comercial. Las líneas aprobadas quedan marcadas con aprobación especial = 'S'. Un descuento por encima
+del tope sin esa marca es un incumplimiento de la política.
+4. Prohibiciones
+No se permite vender por debajo del costo sin aprobación escrita de la Gerencia General. No se permite
+fraccionar pedidos para evadir topes.
+5. Monitoreo
+Control Comercial revisa semanalmente los descuentos por vendedor y región. Un vendedor con
+descuentos fuera de política en dos semanas consecutivas pierde la facultad de cotizar sin revisión previa.
+
+===== politicas/Politica_Inventario_y_Precios.pdf
+--- page 1
+Distribuidora Andina S.A.S. · documento ficticio para el hackatón Centinela
+Política de inventario y revisión de precios
+Código OPE-POL-007 · Versión 3 · Vigente desde el 1 de enero de 2026 · Aprobó: Gerencia General
+1. Objetivo
+Garantizar disponibilidad de producto con el menor capital de trabajo posible, y mantener precios alineados
+con los costos.
+2. Cobertura mínima
+ Clase
+Cobertura mínima
+Acción si se incumple
+A
+10 días de demanda
+Alerta a Compras y a Comercial; expeditar orden de compra
+B
+7 días
+Revisar punto de reorden
+C
+5 días
+Sin acción automática
+La cobertura se calcula como existencia final / demanda promedio diaria de los últimos 30 días, por SKU y
+bodega. Si la cobertura es menor a 5 días y hay pedidos pendientes de despacho, el caso es crítico.
+3. Proveedores
+Una orden de compra que no llega en la fecha esperada se marca como retrasada. Compras debe contactar
+al proveedor el mismo día y evaluar un proveedor alterno o una entrega parcial urgente.
+4. Revisión de precios
+Si el costo de un producto sube más de 5%, Comercial debe revisar el precio de venta en un máximo de 10
+días hábiles. Ninguna línea debe operar por debajo de su margen mínimo:
+ Línea
+Margen mínimo
+Hogar
+25%
+Aseo
+22%
+Alimentos
+15%
+Bebidas
+18%
+Cuidado personal
+25%
+Mascotas
+22%
+Papelería
+28%
+

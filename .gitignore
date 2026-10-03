@@ -1,0 +1,40 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+web/dist/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+.terraform.lock.hcl.bak
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+.mcp.json
+
+# Build / local artifacts
+build/
+dist/
+*.zip
+.claude/settings.local.json

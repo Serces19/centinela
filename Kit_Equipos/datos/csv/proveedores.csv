@@ -1,0 +1,41 @@
+proveedor_id,nombre,lead_time_dias,pais
+PR01,Industrias Plásticas del Valle,6,Colombia
+PR02,Químicos Andinos,6,Colombia
+PR03,Alimentos La Sabana,9,Colombia
+PR04,Bebidas del Caribe,5,Colombia
+PR05,Cosméticos Primavera,6,Colombia
+PR06,Papeles Monserrate,5,Colombia
+PR07,Nutrición Animal Andina,8,Colombia
+PR08,Hogar Total Importaciones,5,Colombia
+PR09,Limpieza Profesional,5,Colombia
+PR10,Lácteos del Norte,8,Colombia
+PR11,Granos de Colombia,7,Colombia
+PR12,Envases Medellín,7,Colombia
+PR13,Distribuidora de Aseo Central,8,Colombia
+PR14,Café y Cacao del Huila,7,Colombia
+PR15,Pastas Doria Sur,9,Colombia
+PR16,Aguas del Oriente,8,Colombia
+PR17,Higiene y Cuidado SAS,5,Colombia
+PR18,Mascotas Felices SAS,6,Colombia
+PR19,Útiles Escolares Andes,6,Colombia
+PR20,Textiles del Hogar,9,Colombia
+PR21,Snacks y Pasabocas,7,Colombia
+PR22,Conservas del Pacífico,7,Colombia
+PR23,Jugos Tropicales,8,Colombia
+PR24,Detergentes Unidos,9,Colombia
+PR25,Cerámicas y Menaje,7,Colombia
+PR26,Aceites Vegetales,8,Colombia
+PR27,Harinas del Valle,5,Colombia
+PR28,Dulces Antioqueños,8,Colombia
+PR29,Electro Hogar Import,7,Colombia
+PR30,Bolsas y Empaques,7,Colombia
+PR31,Vidrios Andinos,9,Colombia
+PR32,Galletas del Norte,9,Colombia
+PR33,Carnes Frías Caribe,5,Colombia
+PR34,Salsas y Condimentos,8,Colombia
+PR35,Cuidado Bebé SAS,7,China
+PR36,Farmacéutica Andina,8,México
+PR37,Oficina Total,5,Perú
+PR38,Insecticidas del Campo,5,Ecuador
+PR39,Velas y Aromas,6,Brasil
+PR40,Cuidado Capilar SAS,6,Chile
