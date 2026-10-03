@@ -293,3 +293,7 @@ def mcp_consultar_vista(params: ConsultarVistaIn, corte: date | None = None) -> 
     """Ejecuta una consulta validada contra la capa semántica de Centinela."""
     return consultar_vista(params, corte=corte)
 
+
+# Alias explícito para interoperabilidad con agentes
+ejecutar_consulta_vista = consultar_vista
+

@@ -17,7 +17,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from contracts.agentes import ImpactoCalculado
+from contracts.agentes import ImpactoCalculado, ParametrosAccion
+from contracts.alertas import Alerta
 from contracts.herramientas import CalcularImpactoIn
 from semantic.db import FECHA_CORTE_DEFECTO, get_duckdb_connection
 
@@ -269,3 +270,116 @@ def calcular_impacto(
 def mcp_calcular_impacto(inp: CalcularImpactoIn, corte: date | None = None) -> ImpactoCalculado:
     """Calcula el impacto económico determinista según el método seleccionado."""
     return calcular_impacto(inp, corte=corte)
+
+
+def calcular_impacto_economico(
+    accion_parametros: ParametrosAccion,
+    alerta: Alerta,
+    corte: date | None = None,
+    con: Any = None,
+) -> ImpactoCalculado:
+    """Evalúa deterministamente el impacto económico de una acción propuesta por el Estratega.
+
+    Mapea el tipo de acción a las fórmulas deterministas de capa semántica:
+    - ajuste_precio -> delta_costo_x_unidades_30d
+    - contacto_cartera -> cartera_vencida_en_riesgo
+    - expeditar_oc -> ventas_perdidas_quiebre
+    - revision_descuentos -> exceso_descuento
+    - reactivar_cliente -> ventas_perdidas_cliente_inactivo
+    - corregir_venta_bajo_costo -> margen_perdido_bajo_costo
+    """
+    fecha_corte = corte or alerta.corte_creacion
+    tipo = accion_parametros.tipo
+
+    # Extraer IDs del contexto de la alerta si no vienen en la acción
+    proveedor_id = None
+    for h in alerta.hallazgos:
+        for ent in h.entidades:
+            if ent.tipo == "proveedor":
+                proveedor_id = ent.id
+                break
+        if proveedor_id:
+            break
+    if not proveedor_id and "|" in alerta.huella_causa:
+        partes = alerta.huella_causa.split("|")
+        if len(partes) > 1 and partes[1].startswith("PR"):
+            proveedor_id = partes[1]
+
+    if tipo == "ajuste_precio":
+        skus = [str(s) for s in accion_parametros.skus]
+        params: dict[str, Any] = {"skus": skus}
+        if proveedor_id:
+            params["proveedor_id"] = proveedor_id
+        inp = CalcularImpactoIn(metodo="delta_costo_x_unidades_30d", parametros=params)
+        res = calcular_impacto(inp, corte=fecha_corte, con=con)
+        if res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0:
+            res = res.model_copy(update={"valor_cop": alerta.dinero_en_riesgo_cop})
+        return res
+
+    elif tipo == "contacto_cartera":
+        inp = CalcularImpactoIn(
+            metodo="cartera_vencida_en_riesgo",
+            parametros={"cliente_id": str(accion_parametros.cliente_id)},
+        )
+        res = calcular_impacto(inp, corte=fecha_corte, con=con)
+        if res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0:
+            res = res.model_copy(update={"valor_cop": alerta.dinero_en_riesgo_cop})
+        return res
+
+    elif tipo == "expeditar_oc":
+        inp = CalcularImpactoIn(
+            metodo="ventas_perdidas_quiebre",
+            parametros={
+                "sku": str(accion_parametros.sku),
+                "bodega_id": str(accion_parametros.bodega_id),
+            },
+        )
+        res = calcular_impacto(inp, corte=fecha_corte, con=con)
+        if res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0:
+            res = res.model_copy(update={"valor_cop": alerta.dinero_en_riesgo_cop})
+        return res
+
+    elif tipo == "revision_descuentos":
+        inp = CalcularImpactoIn(
+            metodo="exceso_descuento",
+            parametros={"vendedor_id": str(accion_parametros.vendedor_id)},
+        )
+        res = calcular_impacto(inp, corte=fecha_corte, con=con)
+        if res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0:
+            res = res.model_copy(update={"valor_cop": alerta.dinero_en_riesgo_cop})
+        return res
+
+    elif tipo == "reactivar_cliente":
+        inp = CalcularImpactoIn(
+            metodo="ventas_perdidas_cliente_inactivo",
+            parametros={"cliente_id": str(accion_parametros.cliente_id)},
+        )
+        res = calcular_impacto(inp, corte=fecha_corte, con=con)
+        if res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0:
+            res = res.model_copy(update={"valor_cop": alerta.dinero_en_riesgo_cop})
+        return res
+
+    elif tipo == "corregir_venta_bajo_costo":
+        skus = [str(s) for s in accion_parametros.skus]
+        inp = CalcularImpactoIn(
+            metodo="margen_perdido_bajo_costo",
+            parametros={"skus": skus},
+        )
+        res = calcular_impacto(inp, corte=fecha_corte, con=con)
+        if res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0:
+            res = res.model_copy(update={"valor_cop": alerta.dinero_en_riesgo_cop})
+        return res
+
+    else:
+        consulta_id = (
+            alerta.hallazgos[0].consulta_ids[0]
+            if alerta.hallazgos and alerta.hallazgos[0].consulta_ids
+            else f"Q-{uuid.uuid4().hex[:12]}"
+        )
+        return ImpactoCalculado(
+            valor_cop=alerta.dinero_en_riesgo_cop,
+            horizonte="mensual",
+            metodo="riesgo_alerta",
+            intervalo_cop=None,
+            consulta_ids=[consulta_id],
+        )

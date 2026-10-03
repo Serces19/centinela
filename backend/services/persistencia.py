@@ -20,10 +20,13 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
+from contracts.agentes import Propuesta
 from contracts.alertas import Alerta
 from contracts.base import AlertaId, EstadoAlerta
 from contracts.bitacora import EntradaBitacora, Evento
 from contracts.configuracion import CORTE_INICIAL_LIMPIO
+from contracts.decision import ResultadoEjecucion
+from contracts.operacion import TrazaLLM
 
 logger = logging.getLogger("centinela.persistencia")
 
@@ -41,6 +44,9 @@ class PersistenciaService:
 
         self._mem_alertas: dict[str, dict] = {}
         self._mem_bitacora: dict[str, list[EntradaBitacora]] = {}
+        self._mem_trazas: dict[str, list[dict]] = {}
+        self._mem_propuestas: dict[str, dict] = {}
+        self._mem_resultados: dict[str, dict] = {}
         self._mem_reloj: dict[str, Any] = {
             "corte": CORTE_INICIAL_LIMPIO,
             "run_id": "bootstrap",
@@ -148,6 +154,127 @@ class PersistenciaService:
             return alertas
         except ClientError as e:
             logger.error(f"Error listando alertas: {e}")
+            raise
+
+    def actualizar_alerta(self, alerta: Alerta, version_previa: int | None = None) -> bool:
+        """Actualiza una alerta existente con bloqueo optimista opcional sobre `version_previa`."""
+        if self.use_memory:
+            actual = self._mem_alertas.get(alerta.alerta_id)
+            if not actual:
+                return False
+            if version_previa is not None and actual.get("version") != version_previa:
+                return False
+            self._mem_alertas[alerta.alerta_id] = alerta.model_dump(mode="json")
+            return True
+
+        item = {
+            "alerta_id": alerta.alerta_id,
+            "tipo_registro": "META",
+            "estado": alerta.estado.value,
+            "dinero_en_riesgo_cop": Decimal(str(alerta.dinero_en_riesgo_cop)),
+            "huella_causa": alerta.huella_causa,
+            "severidad": alerta.severidad.value,
+            "corte_creacion": alerta.corte_creacion.isoformat(),
+            "creada_en": alerta.creada_en.isoformat(),
+            "version": alerta.version,
+            "payload": json.dumps(alerta.model_dump(mode="json")),
+        }
+
+        try:
+            cond_expr = "attribute_exists(alerta_id)"
+            expr_vals: dict[str, Any] = {}
+            if version_previa is not None:
+                cond_expr += " AND version = :v"
+                expr_vals[":v"] = version_previa
+
+            kwargs: dict[str, Any] = {"Item": item, "ConditionExpression": cond_expr}
+            if expr_vals:
+                kwargs["ExpressionAttributeValues"] = expr_vals
+
+            self.tbl_alertas.put_item(**kwargs)
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+
+    def guardar_propuesta(self, propuesta: Propuesta) -> bool:
+        """Guarda la propuesta en centinela_alertas (tipo_registro = 'PROPUESTA') o en memoria."""
+        if self.use_memory:
+            self._mem_propuestas[propuesta.alerta_id] = propuesta.model_dump(mode="json")
+            return True
+
+        item = {
+            "alerta_id": propuesta.alerta_id,
+            "tipo_registro": "PROPUESTA",
+            "generada_en": propuesta.generada_en.isoformat(),
+            "modelo": propuesta.modelo,
+            "payload": json.dumps(propuesta.model_dump(mode="json")),
+        }
+        try:
+            self.tbl_alertas.put_item(Item=item)
+            return True
+        except ClientError as e:
+            logger.error(f"Error guardando propuesta {propuesta.alerta_id}: {e}")
+            raise
+
+    def obtener_propuesta(self, alerta_id: str) -> Propuesta | None:
+        """Recupera la propuesta asociada a una alerta."""
+        if self.use_memory:
+            raw = self._mem_propuestas.get(alerta_id)
+            if not raw:
+                return None
+            return Propuesta.model_validate(raw)
+
+        try:
+            resp = self.tbl_alertas.get_item(
+                Key={"alerta_id": alerta_id, "tipo_registro": "PROPUESTA"}
+            )
+            item = resp.get("Item")
+            if not item:
+                return None
+            return Propuesta.model_validate(json.loads(item["payload"]))
+        except ClientError as e:
+            logger.error(f"Error obteniendo propuesta {alerta_id}: {e}")
+            raise
+
+    def guardar_resultado_ejecucion(self, resultado: ResultadoEjecucion) -> bool:
+        """Guarda el resultado de ejecución (borradores sandbox)."""
+        if self.use_memory:
+            self._mem_resultados[resultado.alerta_id] = resultado.model_dump(mode="json")
+            return True
+
+        item = {
+            "alerta_id": resultado.alerta_id,
+            "tipo_registro": "EJECUCION",
+            "ok": resultado.ok,
+            "payload": json.dumps(resultado.model_dump(mode="json")),
+        }
+        try:
+            self.tbl_alertas.put_item(Item=item)
+            return True
+        except ClientError as e:
+            logger.error(f"Error guardando resultado ejecucion {resultado.alerta_id}: {e}")
+            raise
+
+    def obtener_resultado_ejecucion(self, alerta_id: str) -> ResultadoEjecucion | None:
+        """Obtiene el resultado de ejecución para una alerta."""
+        if self.use_memory:
+            raw = self._mem_resultados.get(alerta_id)
+            if not raw:
+                return None
+            return ResultadoEjecucion.model_validate(raw)
+
+        try:
+            resp = self.tbl_alertas.get_item(
+                Key={"alerta_id": alerta_id, "tipo_registro": "EJECUCION"}
+            )
+            item = resp.get("Item")
+            if not item:
+                return None
+            return ResultadoEjecucion.model_validate(json.loads(item["payload"]))
+        except ClientError as e:
+            logger.error(f"Error obteniendo resultado {alerta_id}: {e}")
             raise
 
     # -------------------------------------------------------------------------
@@ -326,6 +453,66 @@ class PersistenciaService:
             else:
                 omitidas += 1
         return creadas, omitidas
+
+
+    def guardar_traza(self, traza: TrazaLLM) -> bool:
+        """Guarda una traza LLM en centinela_trazas con TTL 30 días o en memoria."""
+        clave_pk = traza.alerta_id or f"CHAT#{traza.run_id}"
+        if self.use_memory:
+            lista = self._mem_trazas.setdefault(clave_pk, [])
+            lista.append(traza.model_dump(mode="json"))
+            return True
+
+        ts_str = traza.ts.isoformat()
+        ts_tipo = f"{ts_str}#{traza.agente}"
+        ttl_val = int(traza.ts.timestamp()) + (30 * 86400)
+
+        item = {
+            "alerta_id": clave_pk,
+            "ts_tipo": ts_tipo,
+            "run_id": traza.run_id,
+            "agente": traza.agente,
+            "modelo": traza.modelo,
+            "tokens_in": traza.tokens_in,
+            "tokens_out": traza.tokens_out,
+            "tokens_cache_lectura": traza.tokens_cache_lectura,
+            "latencia_ms": traza.latencia_ms,
+            "costo_usd": Decimal(str(traza.costo_usd)),
+            "guardrail_intervino": traza.guardrail_intervino,
+            "consulta_ids": traza.consulta_ids,
+            "reintentos": traza.reintentos,
+            "error": traza.error or "",
+            "ttl": ttl_val,
+            "payload": json.dumps(traza.model_dump(mode="json")),
+        }
+        try:
+            self.tbl_trazas.put_item(Item=item)
+            return True
+        except ClientError as e:
+            logger.error(f"Error guardando traza para {clave_pk}: {e}")
+            raise
+
+    def obtener_trazas(self, alerta_id: str) -> list[TrazaLLM]:
+        """Obtiene las trazas LLM asociadas a una alerta."""
+        if self.use_memory:
+            raw_list = self._mem_trazas.get(alerta_id, [])
+            return [TrazaLLM.model_validate(r) for r in raw_list]
+
+        try:
+            from boto3.dynamodb.conditions import Key
+            resp = self.tbl_trazas.query(
+                KeyConditionExpression=Key("alerta_id").eq(alerta_id)
+            )
+            items = resp.get("Items", [])
+            trazas = [
+                TrazaLLM.model_validate(json.loads(it["payload"]))
+                for it in items
+                if "payload" in it
+            ]
+            return trazas
+        except ClientError as e:
+            logger.error(f"Error obteniendo trazas {alerta_id}: {e}")
+            raise
 
 
 # Instancia por defecto del servicio

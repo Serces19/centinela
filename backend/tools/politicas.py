@@ -80,3 +80,7 @@ def buscar_politica(
 def mcp_buscar_politica(params: BuscarPoliticaIn) -> BuscarPoliticaOut:
     """Busca fragmentos normativos en las políticas corporativas (COM-POL-002, FIN-POL-004, OPE-POL-007)."""
     return buscar_politica(params)
+
+
+# Alias explícito para interoperabilidad con agentes
+ejecutar_buscar_politica = buscar_politica

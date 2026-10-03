@@ -25,9 +25,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from contracts.alertas import AlertaVista
+from contracts.base import EstadoAlerta
 from contracts.bitacora import EntradaBitacora, verificar_cadena
 from contracts.configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO
+from contracts.decision import DecisionRequest, ResultadoEjecucion
 from contracts.operacion import ChatToken, ErrorAPI, SimulacionResp
+from agents.graph import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
 from services.persistencia import persistencia_service
 from services.resolucion import resolver_nombres
@@ -209,32 +212,30 @@ def reiniciar_simulacion():
 
 
 # -----------------------------------------------------------------------------
-# Endpoints de Alertas (Vigía y Persistencia)
+# -----------------------------------------------------------------------------
+# Endpoints de Alertas (Vigía, Analista, Estratega y HITL)
 # -----------------------------------------------------------------------------
 @app.get("/alertas", response_model=list[AlertaVista], tags=["Alertas"])
 def listar_alertas(
-    estado: str | None = Query(None, description="Filtrar por estado (p. ej. 'nueva', 'en_analisis')"),
+    response: Response,
+    estado: str | None = Query(None, description="Filtrar por estado (p. ej. 'nueva', 'en_analisis', 'propuesta')"),
     corte: date | None = Query(None, description="Fecha de corte para evaluar hallazgos"),
     persistir: bool = Query(False, description="Persistir hallazgos en DynamoDB y bitacora"),
 ):
-    """Genera y devuelve las alertas del Vigía enriquecidas con nombres resueltos (AlertaVista).
+    """Devuelve las alertas enriquecidas con nombres resueltos y propuestas si existen (AlertaVista)."""
+    fecha_eval = corte or persistencia_service.obtener_reloj()["corte"]
 
-    Si no se especifica `corte`, usa la fecha de corte actual del reloj de simulación.
-    """
-    fecha_eval = corte
-    if fecha_eval is None:
-        fecha_eval = persistencia_service.obtener_reloj()["corte"]
-
-    # Generación determinista del Vigía
-    alertas = generar_alertas(fecha_eval)
-
-    # Persistencia opcional o automática
-    if persistir and alertas:
-        persistencia_service.persistir_alertas_vigia(alertas)
-
-    # Filtrar por estado si se solicitó
-    if estado:
-        alertas = [a for a in alertas if a.estado.value == estado]
+    # Consultar alertas persistidas
+    persisted = persistencia_service.listar_alertas(estado=estado)
+    if persisted:
+        alertas = persisted
+    else:
+        # Generación determinista del Vigía
+        alertas = generar_alertas(fecha_eval)
+        if persistir and alertas:
+            persistencia_service.persistir_alertas_vigia(alertas)
+        if estado:
+            alertas = [a for a in alertas if a.estado.value == estado]
 
     # Recolectar todas las entidades para resolución determinista de nombres
     todas_entidades: set[str] = set()
@@ -245,25 +246,208 @@ def listar_alertas(
 
     nombres_map = resolver_nombres(todas_entidades)
 
-    # Construir AlertaVista con nombres enriquecidos
     vistas: list[AlertaVista] = []
     for a in alertas:
-        # Nombres relevantes para esta alerta
-        nombres_alerta: dict[str, str] = {}
-        for h in a.hallazgos:
-            for ent in h.entidades:
-                if ent.id in nombres_map:
-                    nombres_alerta[ent.id] = nombres_map[ent.id]
-
+        nombres_alerta = {ent.id: nombres_map[ent.id] for h in a.hallazgos for ent in h.entidades if ent.id in nombres_map}
+        propuesta = persistencia_service.obtener_propuesta(a.alerta_id)
         vista = AlertaVista(
             alerta=a,
             nombres_resueltos=nombres_alerta,
-            propuesta=None,
+            propuesta=propuesta,
             consultas=[],
         )
         vistas.append(vista)
 
     return vistas
+
+
+@app.get("/alertas/{alerta_id}", response_model=AlertaVista, tags=["Alertas"])
+def obtener_alerta_detalle(alerta_id: str, request: Request, response: Response):
+    """Consulta el detalle enriquecido de una alerta con propuesta, nombres y consultas (AlertaVista)."""
+    request_id = getattr(request.state, "request_id", "req-unknown")
+    alerta = persistencia_service.obtener_alerta(alerta_id)
+
+    if not alerta:
+        fecha_eval = persistencia_service.obtener_reloj()["corte"]
+        alertas = generar_alertas(fecha_eval)
+        for a in alertas:
+            if a.alerta_id == alerta_id:
+                alerta = a
+                break
+
+    if not alerta:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=ErrorAPI(
+                codigo="no_encontrado",
+                mensaje=f"Alerta '{alerta_id}' no encontrada.",
+                request_id=request_id,
+            ).model_dump(mode="json"),
+        )
+
+    # Entidades y nombres
+    entidades = {ent.id for h in alerta.hallazgos for ent in h.entidades}
+    nombres_resueltos = resolver_nombres(entidades)
+
+    propuesta = persistencia_service.obtener_propuesta(alerta.alerta_id)
+    trazas = persistencia_service.obtener_trazas(alerta.alerta_id)
+    consultas_ids = list({cid for t in trazas for cid in t.consulta_ids})
+
+    response.headers["ETag"] = f'"{alerta.version}"'
+
+    return AlertaVista(
+        alerta=alerta,
+        nombres_resueltos=nombres_resueltos,
+        propuesta=propuesta,
+        consultas=consultas_ids,
+    )
+
+
+@app.post("/alertas/{alerta_id}/procesar", tags=["Alertas"])
+async def procesar_alerta_endpoint(
+    alerta_id: str,
+    request: Request,
+    response: Response,
+    corte: date | None = Query(None, description="Fecha de corte para el análisis"),
+):
+    """Dispara el pipeline de agentes para una alerta: nueva -> en_analisis -> propuesta."""
+    request_id = getattr(request.state, "request_id", "req-unknown")
+    alerta = persistencia_service.obtener_alerta(alerta_id)
+
+    if not alerta:
+        fecha_eval = corte or persistencia_service.obtener_reloj()["corte"]
+        alertas = generar_alertas(fecha_eval)
+        persistencia_service.persistir_alertas_vigia(alertas)
+        alerta = persistencia_service.obtener_alerta(alerta_id)
+
+    if not alerta:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=ErrorAPI(
+                codigo="no_encontrado",
+                mensaje=f"Alerta '{alerta_id}' no encontrada.",
+                request_id=request_id,
+            ).model_dump(mode="json"),
+        )
+
+    fecha_corte = corte or alerta.corte_creacion
+    alerta_act, propuesta = await procesar_alerta_completa(alerta_id, corte=fecha_corte)
+
+    entidades = {ent.id for h in alerta_act.hallazgos for ent in h.entidades}
+    nombres_map = resolver_nombres(entidades)
+
+    response.headers["ETag"] = f'"{alerta_act.version}"'
+
+    return AlertaVista(
+        alerta=alerta_act,
+        nombres_resueltos=nombres_map,
+        propuesta=propuesta,
+        consultas=[],
+    )
+
+
+@app.post("/alertas/{alerta_id}/decision", tags=["Alertas"])
+def tomar_decision_endpoint(
+    alerta_id: str,
+    decision: DecisionRequest,
+    request: Request,
+    response: Response,
+):
+    """Aplica la decisión humana (aprobar, editar, rechazar) con control de concurrencia e idempotencia.
+
+    Requiere cabecera obligatoria 'Idempotency-Key' y soporta 'If-Match: <version>'.
+    """
+    request_id = getattr(request.state, "request_id", "req-unknown")
+
+    # Validar cabecera Idempotency-Key
+    idempotency_key = request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key")
+    if not idempotency_key:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=ErrorAPI(
+                codigo="validacion",
+                mensaje="La cabecera 'Idempotency-Key' es obligatoria para registrar decisiones.",
+                request_id=request_id,
+            ).model_dump(mode="json"),
+        )
+
+    # Validar cabecera If-Match (versión optimista)
+    if_match = request.headers.get("If-Match") or request.headers.get("if-match")
+    version_previa = None
+    if if_match:
+        try:
+            version_previa = int(if_match.strip('"').strip())
+        except ValueError:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=ErrorAPI(
+                    codigo="validacion",
+                    mensaje="La cabecera 'If-Match' debe contener un número de versión válido.",
+                    request_id=request_id,
+                ).model_dump(mode="json"),
+            )
+
+    alerta = persistencia_service.obtener_alerta(alerta_id)
+    if not alerta:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=ErrorAPI(
+                codigo="no_encontrado",
+                mensaje=f"Alerta '{alerta_id}' no encontrada.",
+                request_id=request_id,
+            ).model_dump(mode="json"),
+        )
+
+    # Conflicto de versión optimista
+    if version_previa is not None and alerta.version != version_previa:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=ErrorAPI(
+                codigo="conflicto_version",
+                mensaje=f"Conflicto de versión optimista: versión actual es {alerta.version}, esperada {version_previa}.",
+                request_id=request_id,
+                detalle={"version_actual": alerta.version, "version_esperada": version_previa},
+            ).model_dump(mode="json"),
+        )
+
+    # Transición de estado inválida
+    if alerta.estado != EstadoAlerta.PROPUESTA:
+        if alerta.estado in (EstadoAlerta.APROBADA, EstadoAlerta.EJECUTADA, EstadoAlerta.RECHAZADA):
+            res_prev = persistencia_service.obtener_resultado_ejecucion(alerta_id)
+            if res_prev:
+                return {"alerta": alerta, "resultado": res_prev}
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=ErrorAPI(
+                codigo="transicion_invalida",
+                mensaje=f"Transición inválida desde estado '{alerta.estado.value}'. Solo se permiten decisiones en estado 'propuesta'.",
+                request_id=request_id,
+                detalle={"estado_actual": alerta.estado.value},
+            ).model_dump(mode="json"),
+        )
+
+    # Aplicar decisión humana
+    try:
+        alerta_final, resultado = aplicar_decision_humana(
+            alerta_id=alerta_id,
+            decision=decision,
+            version_previa=version_previa,
+        )
+        response.headers["ETag"] = f'"{alerta_final.version}"'
+        return {
+            "alerta": alerta_final.model_dump(mode="json"),
+            "resultado": resultado.model_dump(mode="json"),
+        }
+    except Exception as e:
+        logger.error(f"Error aplicando decision para {alerta_id}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=ErrorAPI(
+                codigo="interno",
+                mensaje=f"Error al ejecutar decisión humana: {e}",
+                request_id=request_id,
+            ).model_dump(mode="json"),
+        )
 
 
 # -----------------------------------------------------------------------------
