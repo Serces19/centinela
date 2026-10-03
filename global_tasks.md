@@ -55,7 +55,7 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - b. `infra/main.tf` con backend S3, provider y `default_tags { Proyecto = "centinela" }`.
   - c. `aws_budgets_budget` de 20 USD/mes con aviso al 50 % y 80 % por correo (SNS).
   - **Hecho cuando:** `terraform init` y `terraform plan` terminan sin errores.
-- [ ] **0.10 Rol IAM de desarrollo para Bedrock.** `[INF]`
+- [x] **0.10 Rol IAM de desarrollo para Bedrock.** `[INF]`
   - a. Documentar el permiso mínimo de la Lambda: `bedrock:InvokeModel`, `InvokeModelWithResponseStream`, `Converse`, `ConverseStream`, `ApplyGuardrail`, `Retrieve`.
   - b. Recursos: el **perfil de inferencia** `us.anthropic.claude-haiku-4-5-…` **y** los ARN `foundation-model/anthropic.claude-haiku-4-5-…` de las regiones que cubre el perfil (un perfil `us.` enruta a varias regiones; con solo el ARN del perfil falla).
   - **Hecho cuando:** un `converse` desde un rol de prueba con ese permiso responde.
