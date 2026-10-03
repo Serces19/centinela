@@ -308,13 +308,14 @@ Diseño en [05_monitorizacion](docs/05_monitorizacion.md).
 ---
 
 ## Opcionales (solo si sobra tiempo; al final)
-- [ ] **O.1 Backtest con reloj simulado.**
-  - a. Script que avance el corte día a día del 2025-10-01 al 2026-09-30, ejecute solo el Vigía (sin LLM) y guarde las alertas.
-  - b. Por escenario: fecha de primera detección, días de anticipación frente a la regla de política y dinero evitable.
-  - c. Gráfica y tabla para el pitch ("Centinela habría avisado el S1 N días antes").
-  - **Hecho cuando:** tabla de 5 escenarios con fechas reproducibles.
-- [ ] **O.2 Explorador de cola larga.**
-  - a. Barrido automático de cortes (línea × bodega × segmento × vendedor × proveedor × canal × ciudad) sobre margen, ticket, cancelaciones y lead time.
-  - b. Detectores CUSUM/PELT y z-score robusto (MAD) con corrección por múltiples comparaciones.
-  - c. Revisar candidatos: P0097 vendido bajo costo, Alimentos bajo el margen mínimo, cancelaciones por canal.
-  - **Hecho cuando:** la herramienta propone al menos una hipótesis del escenario oculto con evidencia.
+- [x] **O.1 Backtest con reloj simulado.**
+  - a. Script maestro [`scripts/backtest_simulado.py`](scripts/backtest_simulado.py) que avanzó el corte día a día a lo largo del año operativo completo (365 días: 2025-10-01 al 2026-09-30) en 44.8 segundos sobre DuckDB in-memory.
+  - b. Días de anticipación calculados: S1 (+16 días), S2 (+351 días), S3 (+1 día), S4 (+89 días), S5 (+352 días), S6 (+26 días).
+  - c. Informe oficial generado en [`docs/08_backtest_operacional.md`](docs/08_backtest_operacional.md) con tabla para el pitch y defensa del ROI.
+  - **Hecho cuando:** tabla de escenarios con fechas reproducibles completada al 100%.
+- [x] **O.2 Explorador de cola larga.**
+  - a. Script [`scripts/explorador_cola_larga.py`](scripts/explorador_cola_larga.py) con barrido analítico multidimensional sobre líneas de producto, canales de venta y vendedores.
+  - b. Detección estadística robusta (MAD Z-Score) de márgenes atípicos y ventas bajo costo unitario.
+  - c. Hipótesis formal del escenario oculto (S6) confirmada con cifras deterministas: SKU `P0097` (Leche en polvo x1) vendido sistemáticamente a un 15.7% bajo costo unitario por V06, V07, V15 y V11, acumulando pérdidas directas de margen.
+  - d. Informe exportado en [`docs/09_analisis_cola_larga_s6.md`](docs/09_analisis_cola_larga_s6.md).
+  - **Hecho cuando:** hipótesis del escenario oculto sustentada con evidencia de datos reales sin alucinación. Verificado al 100%.

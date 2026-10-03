@@ -146,11 +146,37 @@ class PersistenciaService:
                     KeyConditionExpression=Key("estado").eq(estado),
                     ScanIndexForward=False,  # dinero_en_riesgo descendente
                 )
+                items = resp.get("Items", [])
+                while "LastEvaluatedKey" in resp:
+                    resp = self.tbl_alertas.query(
+                        IndexName="gsi_estado",
+                        KeyConditionExpression=Key("estado").eq(estado),
+                        ScanIndexForward=False,
+                        ExclusiveStartKey=resp["LastEvaluatedKey"],
+                    )
+                    items.extend(resp.get("Items", []))
             else:
-                resp = self.tbl_alertas.scan()
+                from boto3.dynamodb.conditions import Attr
+                resp = self.tbl_alertas.scan(
+                    FilterExpression=Attr("tipo_registro").eq("META")
+                )
+                items = resp.get("Items", [])
+                while "LastEvaluatedKey" in resp:
+                    resp = self.tbl_alertas.scan(
+                        FilterExpression=Attr("tipo_registro").eq("META"),
+                        ExclusiveStartKey=resp["LastEvaluatedKey"],
+                    )
+                    items.extend(resp.get("Items", []))
 
-            items = resp.get("Items", [])
-            alertas = [Alerta.model_validate(json.loads(it["payload"])) for it in items]
+            alertas: list[Alerta] = []
+            for it in items:
+                if it.get("tipo_registro") != "META":
+                    continue
+                try:
+                    alertas.append(Alerta.model_validate(json.loads(it["payload"])))
+                except Exception as e:
+                    logger.warning(f"Error deserializando alerta {it.get('alerta_id')}: {e}")
+
             alertas.sort(key=lambda a: a.dinero_en_riesgo_cop, reverse=True)
             return alertas
         except ClientError as e:

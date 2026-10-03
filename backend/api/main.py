@@ -235,15 +235,16 @@ def listar_alertas(
 
     # Consultar alertas persistidas
     persisted = persistencia_service.listar_alertas(estado=estado)
-    if persisted:
-        alertas = persisted
+    persisted_al_corte = [a for a in persisted if a.corte_creacion <= fecha_eval]
+    if persisted_al_corte:
+        alertas = persisted_al_corte
     else:
-        # Generación determinista del Vigía
+        # Generación determinista del Vigía para la fecha de corte
         alertas = generar_alertas(fecha_eval)
         if persistir and alertas:
             persistencia_service.persistir_alertas_vigia(alertas)
         if estado:
-            alertas = [a for a in alertas if a.estado.value == estado]
+            alertas = [a for a in alertas if (a.estado.value if hasattr(a.estado, "value") else str(a.estado)) == estado]
 
     # Recolectar todas las entidades para resolución determinista de nombres
     todas_entidades: set[str] = set()
