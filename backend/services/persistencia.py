@@ -47,6 +47,7 @@ class PersistenciaService:
         self._mem_trazas: dict[str, list[dict]] = {}
         self._mem_propuestas: dict[str, dict] = {}
         self._mem_resultados: dict[str, dict] = {}
+        self._mem_feedback: dict[str, list[dict]] = {}
         self._mem_reloj: dict[str, Any] = {
             "corte": CORTE_INICIAL_LIMPIO,
             "run_id": "bootstrap",
@@ -513,6 +514,66 @@ class PersistenciaService:
         except ClientError as e:
             logger.error(f"Error obteniendo trazas {alerta_id}: {e}")
             raise
+
+    # -------------------------------------------------------------------------
+    # centinela_config (Feedback y Aprendizaje)
+    # -------------------------------------------------------------------------
+    def guardar_feedback(self, alerta_id: str, motivo: str, actor: str) -> bool:
+        """Guarda el motivo de rechazo en la configuración de feedback (base de aprendizaje)."""
+        now_str = datetime.now(timezone.utc).isoformat()
+        record = {
+            "alerta_id": alerta_id,
+            "motivo": motivo,
+            "actor": actor,
+            "ts": now_str,
+        }
+        if self.use_memory:
+            self._mem_feedback.setdefault(alerta_id, []).append(record)
+            return True
+
+        item = {
+            "config_pk": "FEEDBACK",
+            "config_sk": f"{alerta_id}#{now_str}",
+            "alerta_id": alerta_id,
+            "motivo": motivo,
+            "actor": actor,
+            "ts": now_str,
+        }
+        try:
+            self.tbl_config.put_item(Item=item)
+            return True
+        except Exception as e:
+            logger.warning(f"Error guardando feedback {alerta_id} en DynamoDB ({e}). Guardando en memoria.")
+            self._mem_feedback.setdefault(alerta_id, []).append(record)
+            return True
+
+    def obtener_feedback(self, alerta_id: str | None = None) -> list[dict]:
+        """Recupera los motivos de rechazo guardados para análisis o aprendizaje."""
+        if self.use_memory:
+            if alerta_id:
+                return self._mem_feedback.get(alerta_id, [])
+            todos: list[dict] = []
+            for fbs in self._mem_feedback.values():
+                todos.extend(fbs)
+            return todos
+
+        try:
+            from boto3.dynamodb.conditions import Key
+            resp = self.tbl_config.query(
+                KeyConditionExpression=Key("config_pk").eq("FEEDBACK")
+            )
+            items = resp.get("Items", [])
+            if alerta_id:
+                return [it for it in items if it.get("alerta_id") == alerta_id]
+            return items
+        except Exception as e:
+            logger.warning(f"Error consultando feedback en DynamoDB ({e}). Retornando de memoria.")
+            if alerta_id:
+                return self._mem_feedback.get(alerta_id, [])
+            todos = []
+            for fbs in self._mem_feedback.values():
+                todos.extend(fbs)
+            return todos
 
 
 # Instancia por defecto del servicio

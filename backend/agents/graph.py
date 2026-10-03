@@ -277,7 +277,7 @@ def nodo_ejecutor(state: EstadoGrafo) -> dict[str, Any]:
             tipo_borrador = "tarea"
             contenido = f"Acción aprobada {acc_id} para alerta {alerta.alerta_id}."
             if acc:
-                p = acc.parametros
+                p = (decision.ediciones.get(acc_id) if decision.ediciones else None) or acc.parametros
                 if p.tipo == "contacto_cartera":
                     tipo_borrador = "correo"
                     contenido = f"Borrador de notificación de cartera a cliente {p.cliente_id} (Nivel: {p.nivel})."
@@ -332,6 +332,12 @@ def nodo_ejecutor(state: EstadoGrafo) -> dict[str, Any]:
             alerta_rech = alerta.avanzar(EstadoAlerta.RECHAZADA)
             persistencia_service.actualizar_alerta(alerta_rech, version_previa=alerta.version)
             alerta = alerta_rech
+
+        persistencia_service.guardar_feedback(
+            alerta_id=alerta.alerta_id,
+            motivo=decision.motivo or "",
+            actor=decision.decidido_por,
+        )
 
         resultado = ResultadoEjecucion(
             alerta_id=alerta.alerta_id,
@@ -500,7 +506,7 @@ def aplicar_decision_humana(
             tipo_b = "tarea"
             contenido = f"Ejecución autorizada para acción {acc_id}."
             if acc:
-                p = acc.parametros
+                p = (decision.ediciones.get(acc_id) if decision.ediciones else None) or acc.parametros
                 if p.tipo == "contacto_cartera":
                     tipo_b = "correo"
                     contenido = f"Borrador de gestión de cartera para {p.cliente_id} ({p.nivel})."
@@ -550,6 +556,13 @@ def aplicar_decision_humana(
         # Rechazada
         alerta_rech = alerta.avanzar(EstadoAlerta.RECHAZADA)
         persistencia_service.actualizar_alerta(alerta_rech, version_previa=alerta.version)
+
+        persistencia_service.guardar_feedback(
+            alerta_id=alerta_id,
+            motivo=decision.motivo or "",
+            actor=decision.decidido_por,
+        )
+
         resultado = ResultadoEjecucion(
             alerta_id=alerta_id,
             borradores=[],

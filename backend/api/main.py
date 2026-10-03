@@ -29,9 +29,10 @@ from contracts.base import EstadoAlerta
 from contracts.bitacora import EntradaBitacora, verificar_cadena
 from contracts.configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO
 from contracts.decision import DecisionRequest, ResultadoEjecucion
-from contracts.operacion import ChatToken, ErrorAPI, SimulacionResp
+from contracts.operacion import ChatRequest, ChatToken, ErrorAPI, SimulacionResp
 from agents.graph import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
+from services.chat import generar_respuesta_chat_stream
 from services.persistencia import persistencia_service
 from services.resolucion import resolver_nombres
 
@@ -398,6 +399,12 @@ def tomar_decision_endpoint(
             ).model_dump(mode="json"),
         )
 
+    # Idempotencia: si la alerta ya fue ejecutada o rechazada, retornar resultado previo sin error
+    if alerta.estado in (EstadoAlerta.APROBADA, EstadoAlerta.EJECUTADA, EstadoAlerta.RECHAZADA):
+        res_prev = persistencia_service.obtener_resultado_ejecucion(alerta_id)
+        if res_prev:
+            return {"alerta": alerta.model_dump(mode="json"), "resultado": res_prev.model_dump(mode="json")}
+
     # Conflicto de versión optimista
     if version_previa is not None and alerta.version != version_previa:
         return JSONResponse(
@@ -412,10 +419,6 @@ def tomar_decision_endpoint(
 
     # Transición de estado inválida
     if alerta.estado != EstadoAlerta.PROPUESTA:
-        if alerta.estado in (EstadoAlerta.APROBADA, EstadoAlerta.EJECUTADA, EstadoAlerta.RECHAZADA):
-            res_prev = persistencia_service.obtener_resultado_ejecucion(alerta_id)
-            if res_prev:
-                return {"alerta": alerta, "resultado": res_prev}
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content=ErrorAPI(
@@ -468,3 +471,30 @@ def consultar_bitacora(
         "cadena_valida": cadena_valida,
         "entradas": [e.model_dump(mode="json") for e in entradas],
     }
+
+
+@app.get("/bitacora", tags=["Bitacora"])
+def consultar_bitacora_query(
+    alerta_id: str = Query(..., description="ID de la alerta a consultar"),
+    verificar: bool = Query(False, description="Ejecutar verificacion criptografica de hash SHA-256"),
+):
+    """Consulta la cadena inmutable de bitácora mediante query parameter (Handshake H10)."""
+    return consultar_bitacora(alerta_id=alerta_id, verificar=verificar)
+
+
+# -----------------------------------------------------------------------------
+# Endpoints de Chat de Soporte (Handshake H9 / Tarea 2.17)
+# -----------------------------------------------------------------------------
+@app.post("/chat", tags=["Chat"])
+async def chat_endpoint(request: ChatRequest):
+    """Chat interactivo de soporte anclado a alerta o libre con streaming Server-Sent Events (SSE)."""
+    return StreamingResponse(
+        generar_respuesta_chat_stream(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+

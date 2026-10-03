@@ -360,6 +360,14 @@ async def generar_propuesta(
             for block in content:
                 if "toolUse" in block and block["toolUse"]["name"] == "emitir_propuesta":
                     raw_input = block["toolUse"]["input"]
+                    # Sanitizar longitudes de texto para asegurar cumplimiento estricto del contrato Pydantic
+                    if isinstance(raw_input, dict) and "acciones" in raw_input:
+                        for acc_dict in raw_input.get("acciones", []):
+                            if isinstance(acc_dict, dict):
+                                if "titulo" in acc_dict and isinstance(acc_dict["titulo"], str):
+                                    acc_dict["titulo"] = acc_dict["titulo"][:120].strip()
+                                if "razon" in acc_dict and isinstance(acc_dict["razon"], str):
+                                    acc_dict["razon"] = acc_dict["razon"][:400].strip()
                     propuesta_validada = PropuestaLLM.model_validate(raw_input)
                     acciones_llm = propuesta_validada.acciones
                     break
