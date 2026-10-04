@@ -12,7 +12,7 @@ from .base import (
     Hash256,
 )
 
-Unidad = Literal["COP", "%", "pp", "dias", "unidades", "veces", "lineas", "semanas", "pedidos", "skus"]
+Unidad = Literal["COP", "%", "pp", "dias", "unidades", "veces", "lineas", "semanas", "pedidos", "skus", "clientes"]
 
 
 class ConsultaRegistrada(Contrato):
@@ -57,7 +57,7 @@ _PALABRAS_NUMERO = re.compile(
 )
 
 
-_UNIDAD_REPETIDA = re.compile(r"\b(SKU|líneas?|días?|semanas?|pedidos?|unidades|veces)(?:\s+\1\b)+", re.IGNORECASE)
+_UNIDAD_REPETIDA = re.compile(r"\b(SKU|líneas?|días?|semanas?|pedidos?|unidades|veces|clientes?)(?:\s+\1\b)+", re.IGNORECASE)
 _SECCION = re.compile(r"§\s*\d+(?:\s*-\s*§?\s*\d+)?")
 
 
@@ -120,6 +120,8 @@ def formatear_cifra(c: "CifraTrazable") -> str:
         return f"{miles(v)} {'pedido' if round(v) == 1 else 'pedidos'}"
     if c.unidad == "skus":
         return f"{miles(v)} SKU"
+    if c.unidad == "clientes":
+        return f"{miles(v)} {'cliente' if round(v) == 1 else 'clientes'}"
     return f"{num(v)} unidades"
 
 

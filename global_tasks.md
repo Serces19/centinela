@@ -72,11 +72,10 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - Hecho: impacto calculado con consultas registradas y sin relleno (`tools/impacto.py`); el ajuste de precio muestra el margen que **recupera**, y la renegociación el **sobrecosto** que evita.
   - Hecho: **aprende de rechazos**: el motivo y los tipos de acción rechazados se guardan (tabla `centinela_config`, corregido el esquema de claves) y las propuestas siguientes de la misma familia de causa mandan al final lo ya rechazado y lo explican (`Propuesta.aprendizaje`). `POST /alertas/{id}/reabrir` permite volver a proponer tras un rechazo.
   - Costo medido con Bedrock (Haiku 4.5): ≈ US$ 0,008 por alerta con análisis y propuesta.
-- [ ] **R8 · Chat real (C1).** `[BAK]`
-  - a. Reescribir `generar_respuesta_chat_stream`: Haiku con *tool use* (`consultar_vista` incluyendo agrupación sobre `v_ventas`, y `buscar_politica`), contexto de alerta opcional, máximo 4 llamadas a herramientas, guardrail de entrada y salida, costo real desde `usage`, `consulta_id` válidos.
-  - b. Las respuestas devuelven cifras trazables y, cuando hay serie temporal, un bloque `grafico` (etiquetas y valores) para pintar.
-  - c. Borrar los casos A-E por palabra clave y la bandera `CENTINELA_BEDROCK_CHAT`.
-  - **Hecho cuando:** las tres preguntas de la auditoría ("¿qué otros clientes compran los SKU P0001 y P0006?", "¿qué otros SKU le compramos a PR08?" y la anclada a S1) responden con cifra y fuente reales, en producción, y existe una eval de chat.
+- [x] **R8 · Chat real (C1).** `[BAK]`
+  - Hecho: el chat es un agente (Haiku 4.5) con herramientas `consultar_vista` (SQL parametrizado con agregados, `count(distinct)` y orden por alias) y `buscar_politica`, que responde con la herramienta `responder`: texto con marcadores `{cN}` y referencias a celdas de las consultas. **El servidor lee los valores** (`verificar_respuesta`); el modelo no escribe números (salvo umbrales literales de la política recuperada y números de nombres de producto devueltos por la consulta). Eventos SSE: `paso` (en vivo) → `token` → `cifra` → `grafico` → `fin` (consultas y costo real de Bedrock). Guardrail en la pregunta y en la respuesta; sin datos → "no tengo evidencia suficiente".
+  - Hecho: se eliminó la lógica por palabras clave y `CENTINELA_BEDROCK_CHAT`; `proveedor_id` se añadió a `v_ventas` y `v_cobertura_inventario`; las consultas del chat quedan registradas y se sirven en `/consultas/{id}`.
+  - Verificado con Bedrock real (9 pruebas, 3 corridas seguidas): "¿qué otros clientes compran los SKU P0001 y P0006?", "¿qué otros SKU le compramos al proveedor PR08?", la anclada a S1, política con umbral literal, gráfico con serie real, fuera de datos, inyección.
 - [ ] **R9 · Frontend sin entidades fijas (C3).** `[FRO]`
   - a. Borrar `clasificarEscenario`, `esAlertaEstrategica`, `esCorteInicialLimpio` y los títulos con cifras fijas; usar `GET /alertas/resumen`.
   - b. Bandeja: banner con el dinero en riesgo y las 3 decisiones clave; el resto plegado y ordenado.

@@ -67,8 +67,8 @@ _RE_INYECCION = re.compile(
     re.IGNORECASE,
 )
 
-_RE_AGG = re.compile(r"^(sum|avg|min|max|count)\(([a-z_]+|\*)\)$", re.IGNORECASE)
-_RE_AGG_ALIAS = re.compile(r"^(sum|avg|min|max|count)\(([a-z_]+|\*)\)\s+as\s+([a-z_]{1,40})$", re.IGNORECASE)
+_RE_AGG = re.compile(r"^(sum|avg|min|max|count)\((distinct\s+)?([a-z_]+|\*)\)$", re.IGNORECASE)
+_RE_AGG_ALIAS = re.compile(r"^(sum|avg|min|max|count)\((distinct\s+)?([a-z_]+|\*)\)\s+as\s+([a-z_]{1,40})$", re.IGNORECASE)
 
 
 class ValidadorConsultaError(ValueError):
@@ -82,7 +82,8 @@ class ValidadorConsultaError(ValueError):
 def _validar_expresion_columna(col: str, permitidas: set[str]) -> str:
     """Valida que una columna o agregación simple pertenezca a la lista blanca."""
     col_limpia = col.strip()
-    if _RE_INYECCION.search(col_limpia):
+    expresion = re.split(r"\s+as\s+", col_limpia, maxsplit=1, flags=re.IGNORECASE)[0]   # el alias se valida por patrón
+    if _RE_INYECCION.search(expresion):
         raise ValidadorConsultaError(f"Intento de inyección o uso de tabla cruda detectado en columna: '{col}'")
 
     # Caso 1: Columna directa
@@ -92,45 +93,43 @@ def _validar_expresion_columna(col: str, permitidas: set[str]) -> str:
     # Caso 2: Agregación simple agg(col)
     m = _RE_AGG.match(col_limpia)
     if m:
-        agg, inner = m.group(1).lower(), m.group(2)
-        if inner == "*" and agg == "count":
-            return f"count(*)"
+        agg, distinto, inner = m.group(1).lower(), "distinct " if m.group(2) else "", m.group(3)
+        if inner == "*" and agg == "count" and not distinto:
+            return "count(*)"
         if inner in permitidas:
-            return f"{agg}({inner})"
+            return f"{agg}({distinto}{inner})"
 
     # Caso 3: Agregación con alias agg(col) AS alias
     m_alias = _RE_AGG_ALIAS.match(col_limpia)
     if m_alias:
-        agg, inner, alias = m_alias.group(1).lower(), m_alias.group(2), m_alias.group(3).lower()
-        if inner == "*" and agg == "count":
+        agg, distinto, inner, alias = m_alias.group(1).lower(), "distinct " if m_alias.group(2) else "", m_alias.group(3), m_alias.group(4).lower()
+        if inner == "*" and agg == "count" and not distinto:
             return f"count(*) AS {alias}"
         if inner in permitidas:
-            return f"{agg}({inner}) AS {alias}"
+            return f"{agg}({distinto}{inner}) AS {alias}"
 
     raise ValidadorConsultaError(
         f"Columna o expresión '{col}' no permitida para esta vista. Columnas permitidas: {sorted(permitidas)}"
     )
 
 
-def _validar_ordenar_por(ordenar_por: str, permitidas: set[str]) -> str:
-    """Valida la cláusula ORDER BY asegurando columna y dirección permitidas."""
-    if _RE_INYECCION.search(ordenar_por):
-        raise ValidadorConsultaError(f"Intento de inyección detectado en ordenar_por: '{ordenar_por}'")
-
+def _validar_ordenar_por(ordenar_por: str, permitidas: set[str], alias: set[str] | None = None) -> str:
+    """Valida la cláusula ORDER BY: columna permitida o alias definido en las columnas, y dirección ASC/DESC."""
+    alias = alias or set()
     partes = ordenar_por.strip().split()
     if len(partes) == 1:
-        col = partes[0]
-        direccion = "ASC"
+        col, direccion = partes[0], "ASC"
     elif len(partes) == 2 and partes[1].upper() in {"ASC", "DESC"}:
-        col = partes[0]
-        direccion = partes[1].upper()
+        col, direccion = partes[0], partes[1].upper()
     else:
         raise ValidadorConsultaError(f"Cláusula ordenar_por inválida: '{ordenar_por}'")
 
-    # Validamos que la columna sea permitida
+    if col.lower() in alias:
+        return f"{col.lower()} {direccion}"
+    if _RE_INYECCION.search(ordenar_por):
+        raise ValidadorConsultaError(f"Intento de inyección detectado en ordenar_por: '{ordenar_por}'")
     if col not in permitidas:
-        raise ValidadorConsultaError(f"Columna '{col}' en ordenar_por no permitida.")
-
+        raise ValidadorConsultaError(f"Columna '{col}' en ordenar_por no permitida. Usa una columna de la vista o un alias definido en `columnas`.")
     return f"{col} {direccion}"
 
 
@@ -199,7 +198,8 @@ def consultar_vista(
     # Validar ordenar_por
     clausula_order = ""
     if params.ordenar_por:
-        orden_seguro = _validar_ordenar_por(params.ordenar_por, permitidas)
+        alias = {m.group(4).lower() for c in params.columnas if (m := _RE_AGG_ALIAS.match(c.strip()))}
+        orden_seguro = _validar_ordenar_por(params.ordenar_por, permitidas, alias)
         clausula_order = f" ORDER BY {orden_seguro}"
 
     # Construir query SQL parametrizada

@@ -2,10 +2,10 @@
 from datetime import date, datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from .base import AlertaId, ConsultaId, Contrato
-from .evidencia import CifraTrazable
+from .evidencia import CifraTrazable, Unidad
 
 
 class TrazaLLM(Contrato):
@@ -32,6 +32,8 @@ class ChatRequest(Contrato):
 
 
 class ChatToken(Contrato):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)   # conserva los espacios entre trozos
+
     evento: Literal["token"] = "token"
     texto: str
 
@@ -53,7 +55,56 @@ class ChatError(Contrato):
     mensaje: str
 
 
-ChatEvento = Annotated[Union[ChatToken, ChatCifra, ChatFin, ChatError], Field(discriminator="evento")]
+class ChatPaso(Contrato):
+    """Paso en curso mientras Centinela consulta los datos (se muestra en la interfaz)."""
+    evento: Literal["paso"] = "paso"
+    texto: str
+
+
+class PuntoGrafico(Contrato):
+    etiqueta: str = Field(max_length=60)
+    valor: float
+
+
+class ChatGrafico(Contrato):
+    """Serie para pintar un gráfico. Los puntos salen de una consulta registrada, no del modelo."""
+    evento: Literal["grafico"] = "grafico"
+    titulo: str = Field(max_length=100)
+    tipo: Literal["barras", "linea"]
+    unidad: Unidad
+    consulta_id: ConsultaId
+    puntos: list[PuntoGrafico] = Field(min_length=1, max_length=20)
+
+
+ChatEvento = Annotated[
+    Union[ChatPaso, ChatToken, ChatCifra, ChatGrafico, ChatFin, ChatError], Field(discriminator="evento")
+]
+
+
+class RefCifra(Contrato):
+    """Cifra que el modelo cita de un resultado de consulta: el servidor lee el valor, el modelo no lo escribe."""
+    etiqueta: str = Field(max_length=80)
+    unidad: Unidad
+    consulta_id: ConsultaId
+    columna: str = Field(max_length=60)
+    fila: int = Field(ge=0, description="Posición de la fila en el resultado (0 = primera)")
+
+
+class RefGrafico(Contrato):
+    titulo: str = Field(max_length=100)
+    tipo: Literal["barras", "linea"]
+    unidad: Unidad
+    consulta_id: ConsultaId
+    columna_etiqueta: str = Field(max_length=60)
+    columna_valor: str = Field(max_length=60)
+
+
+class RespuestaChat(Contrato):
+    """Esquema de la herramienta `responder` del chat. El texto cita cifras con marcadores {c1}, {c2}..."""
+    texto: str = Field(max_length=1500)
+    cifras: list[RefCifra] = Field(default_factory=list, max_length=8)
+    grafico: RefGrafico | None = None
+    sin_evidencia: bool = False
 
 
 class ErrorAPI(Contrato):
