@@ -51,7 +51,11 @@ def main():
     api_key = boto3.client("ssm", region_name="us-east-1").get_parameter(
         Name="/centinela/api_key", WithDecryption=True
     )["Parameter"]["Value"]
-    env_build = {**os.environ, "VITE_API_KEY": api_key}
+    api_url = boto3.client("lambda", region_name="us-east-1").get_function_url_config(
+        FunctionName="centinela-backend"
+    )["FunctionUrl"].rstrip("/")
+    print(f"   API: {api_url}")
+    env_build = {**os.environ, "VITE_API_KEY": api_key, "VITE_API_URL": api_url}
     res = subprocess.run(
         cmd_build,
         cwd=str(frontend_dir),
@@ -90,7 +94,9 @@ def main():
 
     # Buscar la app en Amplify
     apps_resp = client.list_apps()
-    app = next((a for a in apps_resp.get("apps", []) if a["name"] == app_name), None)
+    # La app oficial es la que gestiona Terraform (aws_amplify_app.centinela_frontend); AMPLIFY_APP_ID permite cambiarla.
+    app_id_env = os.environ.get("AMPLIFY_APP_ID", "d25dcxbufeuunu")
+    app = next((a for a in apps_resp.get("apps", []) if a["appId"] == app_id_env), None)
 
     if not app:
         print(f"⚠️  La app '{app_name}' no existe en Amplify. Creándola...")
@@ -104,9 +110,6 @@ def main():
                     "status": "200",
                 }
             ],
-            environmentVariables={
-                "VITE_API_URL": "https://kshttlmqbtzbjc5a73m5v6rfre0qimbv.lambda-url.us-east-1.on.aws"
-            },
         )
         app = app_resp["app"]
         print(f"✅ App creada con ID: {app['appId']}")

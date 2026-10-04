@@ -91,7 +91,7 @@ Origen: [docs/05_auditoria.md](docs/05_auditoria.md). Reglas de ejecución: una 
   - e. Reescribir el guion de demo y el pitch con las cifras medidas.
   - **Hecho cuando:** cada número del pitch tiene una consulta o una traza que lo respalda.
 - [x] **R12 · Limpieza del repositorio** (scripts obsoletos eliminados, `temp_seed_*` ignorados por git, README actualizado). `[INF]` Mover o borrar scripts que no se usan, sacar `temp_seed_*` del árbol de trabajo, actualizar `README.md`.
-- [ ] **R13 · Despliegue y verificación final.** `[INF]`
+- [x] **R13 · Despliegue y verificación final** (ver `docs/05_auditoria.md` § Estado final; falta provisioned concurrency y ensayo cronometrado el día de la demo). `[INF]`
   - a. Reconstruir imagen, `terraform apply`, desplegar frontend.
   - b. Ejecutar toda la suite, la evaluación del jurado y `SEMILLA=12` y `42`.
   - c. Repetir en producción las 3 preguntas del chat, el flujo completo de S1 (reloj → alerta → detalle → chat → aprobar → bitácora) y la prueba de inyección.

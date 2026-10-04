@@ -147,3 +147,25 @@ Contratos Pydantic con pruebas, bitácora encadenada con detección de manipulac
 ## 6. Preguntas abiertas
 1. ¿Las láminas 05-07 (criterios de evaluación) ya llegaron? Las prioridades P0 asumen que "demo funcional + chat + cifras correctas" pesa más que el resto.
 2. ¿Se mantiene la decisión de Bedrock Knowledge Base? La auditoría recomienda arreglarla (P0-6); el plan B (políticas completas en el prompt) quita una pieza entera si el tiempo aprieta.
+
+## 7. Estado final (2026-10-04)
+
+Remediación P0–P2 ejecutada (Fase R de `global_tasks.md`). Evidencia verificada:
+
+| Requisito | Evidencia |
+|---|---|
+| Autenticación | Producción: `/alertas` sin clave → 401; `/health` → 200. |
+| Una alerta por causa, orden por dinero | Producción, corte 2026-08-15: 145 causas, $662.006.031 en riesgo sin doble conteo, 3 decisiones clave (cartera C0365, costo PR08 = S1, cliente C0290). |
+| Flujo S1 completo | Producción: procesar → propuesta (renegociar primero, ajuste de precio después) → aprobar → `ejecutada`; bitácora con `cadena_valida = true`. |
+| Rechazar y aprender | Verificado en UI (local): el rechazo se registra, "Volver a proponer" muestra "Centinela aprendió de rechazos anteriores". |
+| Chat con cifra, gráfico y fuente | Producción: "¿Qué otros SKU le compramos al proveedor PR08?" → 6 SKU citados con evento `cifra`; costo por respuesta visible. |
+| Inyección (EJ-03) | Producción: el chat devuelve "Instrucción maliciosa… neutralizada por el guardrail"; informe EJ-03 en `informes/evaluacion_jurado.md`. |
+| KB de políticas | Índice propio en S3 Vectors; 5 consultas de verificación solo devuelven las políticas oficiales. |
+| Pruebas | `pytest evals/`: 122 pasan (incluye multi-semilla 12 y 42 y agentes con Bedrock real). |
+| Informes | `informes/evaluacion_jurado.md` (11/11) y `informes/backtest.md`, generados por script. |
+| Despliegue | Lambda con imagen nueva; frontend en `https://main.d25dcxbufeuunu.amplifyapp.com` (app gestionada por Terraform); tabla `checkpoints` eliminada. |
+
+Notas honestas:
+- La bitácora no se borra al reiniciar el reloj, por eso una alerta reproducida varias veces en ensayos acumula eventos `alerta_creada` repetidos; la cadena sigue verificando. Para la demo final conviene un reinicio previo, sabiendo que la historia previa permanece.
+- Existe una segunda app Amplify huérfana (`d1y5ytuqvgx3m2`, creada por el script antiguo); no se borró.
+- Pendiente antes de presentar: activar provisioned concurrency 1 y ensayar la demo cronometrada con `docs/04_evaluacion_y_demo.md`.
