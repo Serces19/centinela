@@ -1,18 +1,24 @@
 # backend/api/main.py
 """API FastAPI de Centinela.
 
-Endpoints principales:
-- GET /health: Healthcheck del servicio.
-- GET /stream: Streaming SSE para verificación de Lambda Web Adapter.
-- POST /simulacion/avanzar: Avanzar el reloj de simulación temporal.
-- GET /simulacion/corte: Consultar fecha de corte actual y fecha inicial limpia.
-- POST /simulacion/reiniciar: Restablecer el reloj al corte inicial limpio.
-- GET /alertas: Listar alertas del Vigía enriquecidas con nombres resueltos (AlertaVista).
-- GET /bitacora: Consultar y verificar la cadena inmutable de bitácora para una alerta.
+Endpoints (todos exigen `x-api-key`, salvo /health):
+- GET  /health                          Estado del servicio.
+- GET  /simulacion/corte                Corte actual del reloj simulado.
+- POST /simulacion/avanzar?dias=n       Mueve el reloj, ejecuta el Vigía y persiste las alertas nuevas.
+- POST /simulacion/reiniciar            Vuelve al corte limpio y borra el estado de la demo.
+- GET  /alertas                         Una alerta por causa, ordenadas por dinero en riesgo.
+- GET  /alertas/resumen                 Dinero en riesgo y las decisiones clave.
+- GET  /alertas/{id}                    Detalle: causa, evidencia, propuesta.
+- POST /alertas/{id}/procesar           Analista y Estratega: nueva -> en_analisis -> propuesta.
+- POST /alertas/{id}/decision           Aprobar, editar o rechazar (con motivo).
+- GET  /consultas/{id}                  Consulta registrada (SQL, corte, filas y hash) para "Cómo llegué aquí".
+- GET  /bitacora                        Auditoría de una alerta o general, con verificación de la cadena.
+- GET/PUT /config                       Umbrales del Vigía y autonomía por tipo de acción.
+- POST /chat                            Preguntas en lenguaje natural (streaming SSE).
 """
 
-import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 import json
 import logging
@@ -21,21 +27,28 @@ import time
 from typing import Any
 import uuid
 
-from fastapi import Body, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Body, FastAPI, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from contracts.alertas import AlertaVista
-from contracts.base import EstadoAlerta
-from contracts.bitacora import EntradaBitacora, verificar_cadena
-from contracts.configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO
-from contracts.decision import DecisionRequest, ResultadoEjecucion
-from contracts.operacion import ChatRequest, ChatToken, ErrorAPI, SimulacionResp
 from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
+from contracts.alertas import Alerta, AlertaVista, ResumenAlertas
+from contracts.base import EstadoAlerta
+from contracts.bitacora import verificar_cadena
+from contracts.configuracion import (
+    CORTE_INICIAL_LIMPIO,
+    FECHA_CORTE_DEFECTO,
+    ConfigUmbral,
+    ConfiguracionUpdate,
+    ConfiguracionVigia,
+)
+from contracts.decision import DecisionRequest
+from contracts.operacion import ChatRequest, ErrorAPI, SimulacionResp
 from services.auth import RUTAS_PUBLICAS, auth_deshabilitada, clave_valida
 from services.chat import generar_respuesta_chat_stream
 from services.persistencia import persistencia_service
+from services.registro_consultas import consulta_en_cache
 from services.resolucion import resolver_nombres
 from services.telemetry import (
     ctx_request_id,
@@ -43,10 +56,21 @@ from services.telemetry import (
     emitir_decision_humana,
     log_evento,
 )
+from services.umbrales import (
+    META_UMBRALES,
+    ConfiguracionInvalida,
+    Umbrales,
+    cargar_autonomia,
+    cargar_umbrales,
+    guardar_autonomia,
+    guardar_umbrales,
+)
 
-# Configuración de Logging JSON estructurado
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("centinela.api")
+
+ESTADOS_PENDIENTES = (EstadoAlerta.NUEVA, EstadoAlerta.EN_ANALISIS, EstadoAlerta.PROPUESTA)
+ESTADOS_RESUELTOS = (EstadoAlerta.APROBADA, EstadoAlerta.EJECUTADA, EstadoAlerta.RECHAZADA, EstadoAlerta.SIN_EVIDENCIA)
 
 
 @asynccontextmanager
@@ -58,29 +82,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Centinela API",
-    version="0.1.0",
+    version="1.0.0",
     description="Sistema serverless de agentes de IA de vigilancia operacional y financiera",
     lifespan=lifespan,
 )
 
-# -----------------------------------------------------------------------------
-# Middleware de CORS
-# -----------------------------------------------------------------------------
-# En AWS Lambda, la Function URL ya gestiona nativamente los encabezados CORS en el edge.
-# Si se activa CORSMiddleware dentro de Lambda, se duplica 'Access-Control-Allow-Origin'.
-# Por ende, solo se activa en entornos locales / testing donde no existe Function URL.
+# En AWS Lambda la Function URL ya gestiona CORS; activarlo aquí duplicaría la cabecera.
 if not os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
 
 # -----------------------------------------------------------------------------
-# Middleware de autenticación (x-api-key), logging JSON y propagación de x-request-id
+# Middleware: autenticación (x-api-key), logging JSON y propagación de x-request-id
 # -----------------------------------------------------------------------------
 @app.middleware("http")
 async def logging_and_request_id_middleware(request: Request, call_next):
@@ -90,9 +109,7 @@ async def logging_and_request_id_middleware(request: Request, call_next):
     start_time = time.perf_counter()
 
     requiere_clave = (
-        request.method != "OPTIONS"
-        and request.url.path not in RUTAS_PUBLICAS
-        and not auth_deshabilitada()
+        request.method != "OPTIONS" and request.url.path not in RUTAS_PUBLICAS and not auth_deshabilitada()
     )
     if requiere_clave and not clave_valida(request.headers.get("x-api-key")):
         response: Response = JSONResponse(
@@ -108,7 +125,6 @@ async def logging_and_request_id_middleware(request: Request, call_next):
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     response.headers["x-request-id"] = request_id
-
     log_evento(
         nivel="INFO",
         evento="http.request_completado",
@@ -122,59 +138,97 @@ async def logging_and_request_id_middleware(request: Request, call_next):
     return response
 
 
-# -----------------------------------------------------------------------------
-# Endpoints de Salud y Diagnóstico
-# -----------------------------------------------------------------------------
-@app.get("/health", tags=["Salud"])
-def health():
-    """Healthcheck estándar para balanceadores, ALB y monitores."""
-    return {"status": "ok", "version": "0.1.0", "servicio": "centinela"}
-
-
-# -----------------------------------------------------------------------------
-# Endpoint SSE para Streaming (Lambda Web Adapter)
-# -----------------------------------------------------------------------------
-@app.get("/stream", tags=["Streaming"])
-async def stream():
-    """Emite 5 eventos en streaming vía Server-Sent Events (SSE).
-
-    Usado para verificar que el AWS Lambda Web Adapter opera en modo `response_stream`
-    sin buffering intermedio.
-    """
-
-    async def event_generator():
-        for i in range(1, 6):
-            payload = ChatToken(
-                evento="token",
-                texto=f"Evento SSE {i}/5 - Transmisión en tiempo real Centinela",
-            )
-            yield f"data: {payload.model_dump_json()}\n\n"
-            await asyncio.sleep(0.5)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+def _error(request: Request, codigo: str, mensaje: str, http: int, detalle: dict | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=http,
+        content=ErrorAPI(
+            codigo=codigo,
+            mensaje=mensaje,
+            request_id=getattr(request.state, "request_id", "req-unknown"),
+            detalle=detalle,
+        ).model_dump(mode="json"),
     )
 
 
 # -----------------------------------------------------------------------------
-# Endpoints de Simulación Temporal (Reloj)
+# Alertas vivas (Vigía) con caché corta: evita recalcular en cada sondeo de la UI
+# -----------------------------------------------------------------------------
+_VIVAS_TTL_S = 4.0
+_vivas_cache: dict[tuple[date, str], tuple[float, list[Alerta]]] = {}
+
+
+def _alertas_vivas(corte: date) -> list[Alerta]:
+    umbrales = cargar_umbrales()
+    clave = (corte, json.dumps(asdict(umbrales), sort_keys=True))
+    ahora = time.monotonic()
+    hit = _vivas_cache.get(clave)
+    if hit and ahora - hit[0] < _VIVAS_TTL_S:
+        return hit[1]
+    vivas = generar_alertas(corte, umbrales=umbrales)
+    _vivas_cache.clear()
+    _vivas_cache[clave] = (ahora, vivas)
+    return vivas
+
+
+def _alertas_sincronizadas(corte: date, crear: bool) -> list[Alerta]:
+    return persistencia_service.sincronizar_alertas(_alertas_vivas(corte), crear=crear)
+
+
+def _vistas(alertas: list[Alerta]) -> list[AlertaVista]:
+    entidades = {e.id for a in alertas for h in a.hallazgos for e in h.entidades}
+    nombres = resolver_nombres(entidades)
+    ids_con_propuesta = [a.alerta_id for a in alertas if a.estado not in (EstadoAlerta.NUEVA, EstadoAlerta.EN_ANALISIS)]
+    propuestas = persistencia_service.obtener_propuestas(ids_con_propuesta)
+    return [
+        AlertaVista(
+            alerta=a,
+            nombres_resueltos={e.id: nombres[e.id] for h in a.hallazgos for e in h.entidades if e.id in nombres},
+            propuesta=propuestas.get(a.alerta_id),
+            consultas=sorted({cid for h in a.hallazgos for cid in h.consulta_ids}),
+        )
+        for a in alertas
+    ]
+
+
+def _alerta_actual(alerta_id: str) -> Alerta | None:
+    """Alerta persistida con los hallazgos del corte actual (si la causa sigue detectándose)."""
+    persistida = persistencia_service.obtener_alerta(alerta_id)
+    corte = persistencia_service.obtener_reloj()["corte"]
+    vivas = _alertas_vivas(corte)
+    if persistida is None:
+        return next((a for a in vivas if a.alerta_id == alerta_id), None)
+    viva = next((a for a in vivas if a.huella_causa == persistida.huella_causa), None)
+    if viva is None:
+        return persistida
+    return persistida.model_copy(
+        update={
+            "hallazgos": viva.hallazgos,
+            "severidad": viva.severidad,
+            "dinero_en_riesgo_cop": viva.dinero_en_riesgo_cop,
+        }
+    )
+
+
+# -----------------------------------------------------------------------------
+# Salud
+# -----------------------------------------------------------------------------
+@app.get("/health", tags=["Salud"])
+def health():
+    return {"status": "ok", "version": app.version, "servicio": "centinela"}
+
+
+# -----------------------------------------------------------------------------
+# Reloj simulado
 # -----------------------------------------------------------------------------
 @app.get("/simulacion/corte", tags=["Simulacion"])
 def obtener_corte():
-    """Consulta la fecha de corte actual del reloj y los límites permitidos."""
-    estado_reloj = persistencia_service.obtener_reloj()
+    estado = persistencia_service.obtener_reloj()
     return {
-        "corte": estado_reloj["corte"],
+        "corte": estado["corte"],
         "corte_inicial_limpio": CORTE_INICIAL_LIMPIO,
         "corte_maximo": FECHA_CORTE_DEFECTO,
-        "run_id": estado_reloj["run_id"],
-        "actualizado_en": estado_reloj["actualizado_en"],
+        "run_id": estado["run_id"],
+        "actualizado_en": estado["actualizado_en"],
     }
 
 
@@ -184,338 +238,220 @@ def avanzar_simulacion(
     dias: int = Query(None, ge=1, le=365, description="Número de días a avanzar"),
     body: dict[str, Any] | None = Body(None),
 ):
-    """Avanza la fecha de corte del simulador temporal.
-
-    - Acepta `dias` vía Query parameter o JSON body.
-    - Valida que no supere `2026-09-30`.
-    - Actualiza el estado en `centinela_reloj`.
-    - Responde con `SimulacionResp` (Handshake H1).
-    """
+    """Mueve el reloj, ejecuta el Vigía al nuevo corte y persiste las causas detectadas por primera vez."""
     num_dias = dias
     if num_dias is None and body and "dias" in body:
         try:
             num_dias = int(body["dias"])
         except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El campo 'dias' en el cuerpo debe ser un entero.",
-            )
+            return _error(request, "validacion", "El campo 'dias' debe ser un entero.", 400)
+    if num_dias is None or not 1 <= num_dias <= 365:
+        return _error(request, "validacion", "Debe especificar 'dias' entre 1 y 365.", 400)
 
-    if num_dias is None or num_dias < 1 or num_dias > 365:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Debe especificar 'dias' entre 1 y 365.",
-        )
-
-    estado_actual = persistencia_service.obtener_reloj()
-    corte_actual: date = estado_actual["corte"]
-    nuevo_corte = corte_actual + timedelta(days=num_dias)
-
+    nuevo_corte = persistencia_service.obtener_reloj()["corte"] + timedelta(days=num_dias)
     if nuevo_corte > FECHA_CORTE_DEFECTO:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"El corte simulado ({nuevo_corte}) supera la fecha maxima permitida ({FECHA_CORTE_DEFECTO}).",
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": f"El corte simulado ({nuevo_corte}) supera la fecha maxima permitida ({FECHA_CORTE_DEFECTO}).",
+            },
         )
 
     run_id = f"run-{uuid.uuid4().hex[:8]}"
     persistencia_service.actualizar_reloj(nuevo_corte, run_id)
-
+    antes = len(persistencia_service.alertas_por_huella())
+    sincronizadas = _alertas_sincronizadas(nuevo_corte, crear=True)
+    despues = len(persistencia_service.alertas_por_huella())
     return SimulacionResp(
         run_id=run_id,
         corte=nuevo_corte,
         dias_avanzados=num_dias,
-        pipeline_disparado=True,
+        alertas_detectadas=len(sincronizadas),
+        alertas_nuevas=max(despues - antes, 0),
     )
 
 
 @app.post("/simulacion/reiniciar", response_model=SimulacionResp, tags=["Simulacion"])
 def reiniciar_simulacion():
-    """Restablece el reloj de simulación al corte inicial limpio (2026-06-18)."""
+    """Vuelve al corte inicial limpio y borra alertas, propuestas, trazas y rechazos de la demo (no la bitácora)."""
+    borrados = persistencia_service.borrar_estado_demo()
+    _vivas_cache.clear()
     estado = persistencia_service.reiniciar_reloj()
-    return SimulacionResp(
-        run_id=estado["run_id"],
-        corte=estado["corte"],
-        dias_avanzados=0,
-        pipeline_disparado=False,
-    )
+    log_evento("INFO", "simulacion.reiniciada", agente="api", **borrados)
+    return SimulacionResp(run_id=estado["run_id"], corte=estado["corte"], dias_avanzados=0)
 
 
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# Endpoints de Alertas (Vigía, Analista, Estratega y HITL)
+# Alertas
 # -----------------------------------------------------------------------------
 @app.get("/alertas", response_model=list[AlertaVista], tags=["Alertas"])
 def listar_alertas(
-    response: Response,
-    estado: str | None = Query(None, description="Filtrar por estado (p. ej. 'nueva', 'en_analisis', 'propuesta')"),
-    corte: date | None = Query(None, description="Fecha de corte para evaluar hallazgos"),
-    persistir: bool = Query(False, description="Persistir hallazgos en DynamoDB y bitacora"),
+    estado: str | None = Query(None, description="Filtrar por estado (p. ej. 'nueva', 'propuesta')"),
+    corte: date | None = Query(None, description="Evalúa al corte indicado sin persistir (pruebas)"),
+    persistir: bool = Query(False, description="Con `corte`, persiste las causas nuevas"),
 ):
-    """Devuelve las alertas enriquecidas con nombres resueltos y propuestas si existen (AlertaVista)."""
+    """Una alerta por causa al corte actual, con estado, propuesta y nombres resueltos."""
     fecha_eval = corte or persistencia_service.obtener_reloj()["corte"]
+    alertas = _alertas_sincronizadas(fecha_eval, crear=corte is None or persistir)
+    if estado:
+        alertas = [a for a in alertas if a.estado.value == estado]
+    return _vistas(alertas)
 
-    # Consultar alertas persistidas
-    persisted = persistencia_service.listar_alertas(estado=estado)
-    persisted_al_corte = [a for a in persisted if a.corte_creacion <= fecha_eval]
-    if persisted_al_corte:
-        alertas = persisted_al_corte
-    else:
-        # Generación determinista del Vigía para la fecha de corte
-        alertas = generar_alertas(fecha_eval)
-        if persistir and alertas:
-            persistencia_service.persistir_alertas_vigia(alertas)
-        if estado:
-            alertas = [a for a in alertas if (a.estado.value if hasattr(a.estado, "value") else str(a.estado)) == estado]
 
-    # Recolectar todas las entidades para resolución determinista de nombres
-    todas_entidades: set[str] = set()
-    for a in alertas:
-        for h in a.hallazgos:
-            for ent in h.entidades:
-                todas_entidades.add(ent.id)
+@app.get("/alertas/resumen", response_model=ResumenAlertas, tags=["Alertas"])
+def resumen_alertas():
+    """Dinero en riesgo (una alerta por causa, sin doble conteo) y las tres decisiones clave."""
+    corte = persistencia_service.obtener_reloj()["corte"]
+    alertas = _alertas_sincronizadas(corte, crear=True)
+    pendientes = [a for a in alertas if a.estado in ESTADOS_PENDIENTES]
+    resueltas = [a for a in alertas if a.estado in ESTADOS_RESUELTOS]
 
-    nombres_map = resolver_nombres(todas_entidades)
+    # Decisiones clave: la mayor alerta de cada familia de causa (costo/margen, cartera, inactividad...), hasta tres.
+    clave: list[Alerta] = []
+    familias: set[str] = set()
+    for a in sorted(pendientes, key=lambda x: x.dinero_en_riesgo_cop, reverse=True):
+        familia = a.huella_causa.split("|", 1)[0]
+        if familia in familias:
+            continue
+        familias.add(familia)
+        clave.append(a)
+        if len(clave) == 3:
+            break
 
-    vistas: list[AlertaVista] = []
-    for a in alertas:
-        nombres_alerta = {ent.id: nombres_map[ent.id] for h in a.hallazgos for ent in h.entidades if ent.id in nombres_map}
-        propuesta = persistencia_service.obtener_propuesta(a.alerta_id)
-        vista = AlertaVista(
-            alerta=a,
-            nombres_resueltos=nombres_alerta,
-            propuesta=propuesta,
-            consultas=[],
-        )
-        vistas.append(vista)
+    por_severidad: dict[str, int] = {}
+    for a in pendientes:
+        por_severidad[a.severidad.value] = por_severidad.get(a.severidad.value, 0) + 1
 
-    return vistas
+    return ResumenAlertas(
+        corte=corte,
+        total_dinero_en_riesgo_cop=sum(a.dinero_en_riesgo_cop for a in pendientes),
+        pendientes=len(pendientes),
+        resueltas=len(resueltas),
+        por_severidad=por_severidad,
+        decisiones_clave=_vistas(clave),
+    )
 
 
 @app.get("/alertas/{alerta_id}", response_model=AlertaVista, tags=["Alertas"])
 def obtener_alerta_detalle(alerta_id: str, request: Request, response: Response):
-    """Consulta el detalle enriquecido de una alerta con propuesta, nombres y consultas (AlertaVista)."""
-    request_id = getattr(request.state, "request_id", "req-unknown")
-    alerta = persistencia_service.obtener_alerta(alerta_id)
-
+    alerta = _alerta_actual(alerta_id)
     if not alerta:
-        fecha_eval = persistencia_service.obtener_reloj()["corte"]
-        alertas = generar_alertas(fecha_eval)
-        for a in alertas:
-            if a.alerta_id == alerta_id:
-                alerta = a
-                break
-
-    if not alerta:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content=ErrorAPI(
-                codigo="no_encontrado",
-                mensaje=f"Alerta '{alerta_id}' no encontrada.",
-                request_id=request_id,
-            ).model_dump(mode="json"),
-        )
-
-    # Entidades y nombres
-    entidades = {ent.id for h in alerta.hallazgos for ent in h.entidades}
-    nombres_resueltos = resolver_nombres(entidades)
-
-    propuesta = persistencia_service.obtener_propuesta(alerta.alerta_id)
-    trazas = persistencia_service.obtener_trazas(alerta.alerta_id)
-    consultas_ids = list({cid for t in trazas for cid in t.consulta_ids})
-
+        return _error(request, "no_encontrado", f"Alerta '{alerta_id}' no encontrada.", 404)
     response.headers["ETag"] = f'"{alerta.version}"'
-
-    return AlertaVista(
-        alerta=alerta,
-        nombres_resueltos=nombres_resueltos,
-        propuesta=propuesta,
-        consultas=consultas_ids,
-    )
+    return _vistas([alerta])[0]
 
 
-@app.post("/alertas/{alerta_id}/procesar", tags=["Alertas"])
-async def procesar_alerta_endpoint(
-    alerta_id: str,
-    request: Request,
-    response: Response,
-    corte: date | None = Query(None, description="Fecha de corte para el análisis"),
-):
-    """Dispara el pipeline de agentes para una alerta: nueva -> en_analisis -> propuesta."""
-    request_id = getattr(request.state, "request_id", "req-unknown")
-    alerta = persistencia_service.obtener_alerta(alerta_id)
-
+@app.post("/alertas/{alerta_id}/procesar", response_model=AlertaVista, tags=["Alertas"])
+async def procesar_alerta_endpoint(alerta_id: str, request: Request, response: Response):
+    """Analista y Estratega sobre una alerta: nueva -> en_analisis -> propuesta (idempotente)."""
+    alerta = _alerta_actual(alerta_id)
     if not alerta:
-        fecha_eval = corte or persistencia_service.obtener_reloj()["corte"]
-        alertas = generar_alertas(fecha_eval)
-        persistencia_service.persistir_alertas_vigia(alertas)
-        alerta = persistencia_service.obtener_alerta(alerta_id)
-
-    if not alerta:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content=ErrorAPI(
-                codigo="no_encontrado",
-                mensaje=f"Alerta '{alerta_id}' no encontrada.",
-                request_id=request_id,
-            ).model_dump(mode="json"),
-        )
-
-    fecha_corte = corte or alerta.corte_creacion
-    alerta_act, propuesta = await procesar_alerta_completa(alerta_id, corte=fecha_corte)
-
-    entidades = {ent.id for h in alerta_act.hallazgos for ent in h.entidades}
-    nombres_map = resolver_nombres(entidades)
-
+        return _error(request, "no_encontrado", f"Alerta '{alerta_id}' no encontrada.", 404)
+    if persistencia_service.obtener_alerta(alerta_id) is None:
+        persistencia_service.persistir_alertas_nuevas([alerta])
+    else:
+        persistencia_service.actualizar_alerta(alerta)   # refresca hallazgos al corte actual
+    corte = persistencia_service.obtener_reloj()["corte"]
+    try:
+        alerta_act, _ = await procesar_alerta_completa(alerta_id, corte=corte)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Fallo procesando %s", alerta_id)
+        return _error(request, "interno", f"No se pudo procesar la alerta: {e}", 500)
     response.headers["ETag"] = f'"{alerta_act.version}"'
-
-    return AlertaVista(
-        alerta=alerta_act,
-        nombres_resueltos=nombres_map,
-        propuesta=propuesta,
-        consultas=[],
-    )
+    return _vistas([alerta_act])[0]
 
 
 @app.post("/alertas/{alerta_id}/decision", tags=["Alertas"])
-def tomar_decision_endpoint(
-    alerta_id: str,
-    decision: DecisionRequest,
-    request: Request,
-    response: Response,
-):
-    """Aplica la decisión humana (aprobar, editar, rechazar) con control de concurrencia e idempotencia.
+def tomar_decision_endpoint(alerta_id: str, decision: DecisionRequest, request: Request, response: Response):
+    """Aprueba, edita o rechaza. Exige `Idempotency-Key`; soporta `If-Match: <versión>`."""
+    if not request.headers.get("Idempotency-Key"):
+        return _error(request, "validacion", "La cabecera 'Idempotency-Key' es obligatoria para registrar decisiones.", 400)
 
-    Requiere cabecera obligatoria 'Idempotency-Key' y soporta 'If-Match: <version>'.
-    """
-    request_id = getattr(request.state, "request_id", "req-unknown")
-
-    # Validar cabecera Idempotency-Key
-    idempotency_key = request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key")
-    if not idempotency_key:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content=ErrorAPI(
-                codigo="validacion",
-                mensaje="La cabecera 'Idempotency-Key' es obligatoria para registrar decisiones.",
-                request_id=request_id,
-            ).model_dump(mode="json"),
-        )
-
-    # Validar cabecera If-Match (versión optimista)
-    if_match = request.headers.get("If-Match") or request.headers.get("if-match")
     version_previa = None
+    if_match = request.headers.get("If-Match")
     if if_match:
         try:
             version_previa = int(if_match.strip('"').strip())
         except ValueError:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content=ErrorAPI(
-                    codigo="validacion",
-                    mensaje="La cabecera 'If-Match' debe contener un número de versión válido.",
-                    request_id=request_id,
-                ).model_dump(mode="json"),
-            )
+            return _error(request, "validacion", "La cabecera 'If-Match' debe contener un número de versión válido.", 400)
 
     alerta = persistencia_service.obtener_alerta(alerta_id)
     if not alerta:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content=ErrorAPI(
-                codigo="no_encontrado",
-                mensaje=f"Alerta '{alerta_id}' no encontrada.",
-                request_id=request_id,
-            ).model_dump(mode="json"),
-        )
+        return _error(request, "no_encontrado", f"Alerta '{alerta_id}' no encontrada.", 404)
 
-    # Idempotencia: si la alerta ya fue ejecutada o rechazada, retornar resultado previo sin error
     if alerta.estado in (EstadoAlerta.APROBADA, EstadoAlerta.EJECUTADA, EstadoAlerta.RECHAZADA):
-        res_prev = persistencia_service.obtener_resultado_ejecucion(alerta_id)
-        if res_prev:
-            return {"alerta": alerta.model_dump(mode="json"), "resultado": res_prev.model_dump(mode="json")}
+        previo = persistencia_service.obtener_resultado_ejecucion(alerta_id)
+        if previo:
+            return {"alerta": alerta.model_dump(mode="json"), "resultado": previo.model_dump(mode="json")}
 
-    # Conflicto de versión optimista
     if version_previa is not None and alerta.version != version_previa:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content=ErrorAPI(
-                codigo="conflicto_version",
-                mensaje=f"Conflicto de versión optimista: versión actual es {alerta.version}, esperada {version_previa}.",
-                request_id=request_id,
-                detalle={"version_actual": alerta.version, "version_esperada": version_previa},
-            ).model_dump(mode="json"),
+        return _error(
+            request,
+            "conflicto_version",
+            f"Conflicto de versión optimista: versión actual es {alerta.version}, esperada {version_previa}.",
+            409,
+            {"version_actual": alerta.version, "version_esperada": version_previa},
         )
-
-    # Transición de estado inválida
     if alerta.estado != EstadoAlerta.PROPUESTA:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content=ErrorAPI(
-                codigo="transicion_invalida",
-                mensaje=f"Transición inválida desde estado '{alerta.estado.value}'. Solo se permiten decisiones en estado 'propuesta'.",
-                request_id=request_id,
-                detalle={"estado_actual": alerta.estado.value},
-            ).model_dump(mode="json"),
+        return _error(
+            request,
+            "transicion_invalida",
+            f"Transición inválida desde estado '{alerta.estado.value}'. Solo se permiten decisiones en estado 'propuesta'.",
+            409,
+            {"estado_actual": alerta.estado.value},
         )
 
-    # Aplicar decisión humana
     try:
-        alerta_final, resultado = aplicar_decision_humana(
-            alerta_id=alerta_id,
-            decision=decision,
-            version_previa=version_previa,
-        )
-        dec_str = str(decision.decision)
-        emitir_decision_humana(dec_str)
-        log_evento(
-            nivel="INFO",
-            evento="hitl.decision_aplicada",
-            agente="hitl",
-            alerta_id=alerta_id,
-            decision=dec_str,
-            actor=decision.decidido_por,
-        )
-        response.headers["ETag"] = f'"{alerta_final.version}"'
-        return {
-            "alerta": alerta_final.model_dump(mode="json"),
-            "resultado": resultado.model_dump(mode="json"),
-        }
-    except Exception as e:
-        logger.error(f"Error aplicando decision para {alerta_id}: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=ErrorAPI(
-                codigo="interno",
-                mensaje=f"Error al ejecutar decisión humana: {e}",
-                request_id=request_id,
-            ).model_dump(mode="json"),
-        )
+        alerta_final, resultado = aplicar_decision_humana(alerta_id=alerta_id, decision=decision, version_previa=version_previa)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error aplicando decisión de %s", alerta_id)
+        return _error(request, "interno", f"Error al ejecutar la decisión humana: {e}", 500)
+
+    emitir_decision_humana(str(decision.decision))
+    log_evento("INFO", "hitl.decision_aplicada", agente="hitl", alerta_id=alerta_id, decision=str(decision.decision), actor=decision.decidido_por)
+    response.headers["ETag"] = f'"{alerta_final.version}"'
+    return {"alerta": alerta_final.model_dump(mode="json"), "resultado": resultado.model_dump(mode="json")}
 
 
 # -----------------------------------------------------------------------------
-# Endpoints de Bitácora (Handshake H10)
+# Consultas registradas ("Cómo llegué aquí")
 # -----------------------------------------------------------------------------
-@app.get("/bitacora/{alerta_id}", tags=["Bitacora"])
+@app.get("/consultas/{consulta_id}", tags=["Consultas"])
+def obtener_consulta(consulta_id: str, request: Request):
+    consulta = persistencia_service.obtener_consulta(consulta_id) or consulta_en_cache(consulta_id)
+    if consulta is None:
+        return _error(request, "no_encontrado", f"Consulta '{consulta_id}' no encontrada.", 404)
+    return consulta.model_dump(mode="json")
+
+
+# -----------------------------------------------------------------------------
+# Bitácora
+# -----------------------------------------------------------------------------
+@app.get("/bitacora", tags=["Bitacora"])
 def consultar_bitacora(
-    alerta_id: str,
-    verificar: bool = Query(False, description="Ejecutar verificacion criptografica de hash SHA-256"),
+    alerta_id: str | None = Query(None, description="Si se omite, devuelve la auditoría general"),
+    verificar: bool = Query(False, description="Verifica la cadena SHA-256 (solo con alerta_id)"),
+    actor: str | None = Query(None),
+    evento: str | None = Query(None),
+    limite: int = Query(100, ge=1, le=500),
 ):
-    """Consulta la cadena inmutable de bitácora para una alerta dada."""
+    """Auditoría de una alerta (con verificación de cadena) o general (quién hizo qué y cuándo)."""
+    if alerta_id is None:
+        entradas = persistencia_service.listar_bitacora(limite=limite, actor=actor, evento=evento)
+        return {
+            "alerta_id": None,
+            "total_entradas": len(entradas),
+            "cadena_valida": True,
+            "entradas": [e.model_dump(mode="json") for e in entradas],
+        }
+
     entradas = persistencia_service.obtener_bitacora(alerta_id)
+    cadena_valida = True
     if verificar and entradas:
         cadena_valida = verificar_cadena(entradas)
         if not cadena_valida:
             emitir_bitacora_cadena_rota(tipo="sha256_o_secuencia_invalida")
-            log_evento(
-                nivel="CRITICAL",
-                evento="bitacora.cadena_rota",
-                agente="bitacora",
-                alerta_id=alerta_id,
-                tipo="sha256_o_secuencia_invalida",
-            )
-    else:
-        cadena_valida = True
-
+            log_evento("CRITICAL", "bitacora.cadena_rota", agente="bitacora", alerta_id=alerta_id, tipo="sha256_o_secuencia_invalida")
     return {
         "alerta_id": alerta_id,
         "total_entradas": len(entradas),
@@ -524,28 +460,62 @@ def consultar_bitacora(
     }
 
 
-@app.get("/bitacora", tags=["Bitacora"])
-def consultar_bitacora_query(
-    alerta_id: str = Query(..., description="ID de la alerta a consultar"),
-    verificar: bool = Query(False, description="Ejecutar verificacion criptografica de hash SHA-256"),
-):
-    """Consulta la cadena inmutable de bitácora mediante query parameter (Handshake H10)."""
-    return consultar_bitacora(alerta_id=alerta_id, verificar=verificar)
+@app.get("/bitacora/{alerta_id}", tags=["Bitacora"], include_in_schema=False)
+def consultar_bitacora_por_ruta(alerta_id: str, verificar: bool = Query(False)):
+    return consultar_bitacora(alerta_id=alerta_id, verificar=verificar, actor=None, evento=None, limite=500)
 
 
 # -----------------------------------------------------------------------------
-# Endpoints de Chat de Soporte (Handshake H9 / Tarea 2.17)
+# Configuración del Vigía
+# -----------------------------------------------------------------------------
+def _configuracion_vigente() -> ConfiguracionVigia:
+    actuales = asdict(cargar_umbrales())
+    defecto = asdict(Umbrales())
+    umbrales = [
+        ConfigUmbral(
+            nombre=nombre,
+            etiqueta=meta["etiqueta"],
+            kpi=meta["kpi"],
+            unidad=meta["unidad"],
+            politica=meta["politica"],
+            valor=float(actuales[nombre]),
+            defecto=float(defecto[nombre]),
+            minimo=float(meta["min"]),
+            maximo=float(meta["max"]),
+        )
+        for nombre, meta in META_UMBRALES.items()
+    ]
+    return ConfiguracionVigia(umbrales=umbrales, autonomia=cargar_autonomia())
+
+
+@app.get("/config", response_model=ConfiguracionVigia, tags=["Configuracion"])
+def obtener_configuracion():
+    return _configuracion_vigente()
+
+
+@app.put("/config", response_model=ConfiguracionVigia, tags=["Configuracion"])
+def actualizar_configuracion(cambios: ConfiguracionUpdate, request: Request):
+    """Cambia umbrales y autonomía. El Vigía usa los nuevos valores desde el siguiente cálculo."""
+    try:
+        if cambios.umbrales:
+            guardar_umbrales(cambios.umbrales, cambios.actor)
+        if cambios.autonomia:
+            guardar_autonomia(cambios.autonomia, cambios.actor)
+    except ConfiguracionInvalida as e:
+        return _error(request, "validacion", str(e), 422)
+    _vivas_cache.clear()
+    log_evento("INFO", "config.actualizada", agente="api", actor=cambios.actor, umbrales=list(cambios.umbrales), autonomia=list(cambios.autonomia))
+    return _configuracion_vigente()
+
+
+# -----------------------------------------------------------------------------
+# Chat (SSE)
 # -----------------------------------------------------------------------------
 @app.post("/chat", tags=["Chat"])
 async def chat_endpoint(request: ChatRequest):
-    """Chat interactivo de soporte anclado a alerta o libre con streaming Server-Sent Events (SSE)."""
+    """Chat anclado a una alerta o libre, con streaming Server-Sent Events."""
     return StreamingResponse(
         generar_respuesta_chat_stream(request),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
-

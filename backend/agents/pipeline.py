@@ -22,6 +22,7 @@ from contracts.base import EstadoAlerta
 from contracts.bitacora import Evento
 from contracts.decision import Borrador, DecisionRequest, ResultadoEjecucion
 from services.persistencia import persistencia_service
+from services.umbrales import cargar_autonomia
 
 logger = logging.getLogger("centinela.agente.pipeline")
 
@@ -45,7 +46,8 @@ async def procesar_alerta_completa(
 
     if alerta.estado == EstadoAlerta.NUEVA:
         alerta = alerta.avanzar(EstadoAlerta.EN_ANALISIS)
-        persistencia_service.actualizar_alerta(alerta)
+    alerta = alerta.model_copy(update={"paso_actual": "analista"})
+    persistencia_service.actualizar_alerta(alerta)
 
     diagnostico, _ = await analizar_alerta(alerta)
 
@@ -63,12 +65,14 @@ async def procesar_alerta_completa(
     )
 
     if not diagnostico.evidencia_suficiente:
-        alerta = alerta.avanzar(EstadoAlerta.SIN_EVIDENCIA)
+        alerta = alerta.avanzar(EstadoAlerta.SIN_EVIDENCIA).model_copy(update={"paso_actual": "ninguno"})
         persistencia_service.actualizar_alerta(alerta)
         return alerta, None
 
+    alerta = alerta.model_copy(update={"paso_actual": "estratega"})
+    persistencia_service.actualizar_alerta(alerta)
     propuesta, _ = await generar_propuesta(alerta, diagnostico)
-    alerta = alerta.avanzar(EstadoAlerta.PROPUESTA)
+    alerta = alerta.avanzar(EstadoAlerta.PROPUESTA).model_copy(update={"paso_actual": "ninguno"})
     persistencia_service.actualizar_alerta(alerta)
 
     persistencia_service.sellar_evento(
@@ -93,9 +97,12 @@ def _generar_borradores(
 ) -> list[Borrador]:
     """Un borrador `sandbox://` por cada acción aprobada o editada. Nunca hay efecto externo."""
     acciones = {a.accion_id: a for a in propuesta.acciones} if propuesta else {}
+    autonomia = cargar_autonomia()
     borradores: list[Borrador] = []
     for acc_id in decision.accion_ids:
         acc = acciones.get(acc_id)
+        if acc and autonomia.get((decision.ediciones.get(acc_id) or acc.parametros).tipo) == "informa":
+            continue   # nivel "informa": se avisa, no se prepara ninguna acción
         tipo = "tarea"
         contenido = f"Ejecución autorizada para la acción {acc_id}."
         if acc:
@@ -192,6 +199,8 @@ def aplicar_decision_humana(
         alerta_id=alerta_id,
         motivo=decision.motivo or "",
         actor=decision.decidido_por,
+        huella_causa=alerta.huella_causa,
+        tipos_accion=sorted({a.parametros.tipo for a in propuesta.acciones}) if propuesta else [],
     )
     resultado = ResultadoEjecucion(
         alerta_id=alerta_id,

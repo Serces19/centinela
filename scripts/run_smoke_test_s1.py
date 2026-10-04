@@ -76,7 +76,8 @@ async def ejecutar_smoke_test_s1():
     t_v0 = time.perf_counter()
     print("[1/5] Ejecutando Agente Vigía determinista sobre DuckDB...")
     alertas = generar_alertas(corte_s1)
-    creadas, omitidas = persistencia_service.persistir_alertas_vigia(alertas)
+    creadas = persistencia_service.persistir_alertas_nuevas(alertas)
+    omitidas = len(alertas) - creadas
     t_vigia = time.perf_counter() - t_v0
 
     alerta_s1 = next((a for a in alertas if "PR08" in a.huella_causa), None)

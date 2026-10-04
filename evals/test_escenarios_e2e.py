@@ -58,7 +58,7 @@ async def test_escenario_s1_ciclo_completo_aprobacion():
     """Ciclo de vida completo S1: Vigía -> Analista/Estratega -> Aprobación -> Ejecución -> Bitácora."""
     corte = date(2026, 8, 15)
     alertas = generar_alertas(corte)
-    persistencia_service.persistir_alertas_vigia(alertas)
+    persistencia_service.persistir_alertas_nuevas(alertas)
 
     # 1. Vigía detecta S1 (costo|PR08)
     alerta_s1 = next((a for a in alertas if a.huella_causa == "costo|PR08"), None)
@@ -131,7 +131,7 @@ async def test_escenario_s2_ciclo_completo_edicion():
     """Ciclo de vida completo S2: Vigía -> Estratega -> Edición de Parámetros -> Ejecución -> Bitácora."""
     corte = date(2026, 9, 30)
     alertas = generar_alertas(corte)
-    persistencia_service.persistir_alertas_vigia(alertas)
+    persistencia_service.persistir_alertas_nuevas(alertas)
 
     # 1. Vigía detecta S2 (saldo_vencido|C0496)
     alerta_s2 = next((a for a in alertas if a.huella_causa == "saldo_vencido|C0496"), None)
@@ -204,7 +204,7 @@ async def test_escenario_s4_ciclo_completo_rechazo():
     """Ciclo de vida completo S4: Vigía -> Estratega -> Rechazo con Motivo Obligatorio -> Feedback -> Bitácora."""
     corte = date(2026, 9, 30)
     alertas = generar_alertas(corte)
-    persistencia_service.persistir_alertas_vigia(alertas)
+    persistencia_service.persistir_alertas_nuevas(alertas)
 
     # 1. Vigía detecta S4 (descuento_en_exceso|V03)
     alerta_s4 = next((a for a in alertas if a.huella_causa == "descuento_en_exceso|V03"), None)
@@ -266,7 +266,7 @@ async def test_escenario_s4_ciclo_completo_rechazo():
     assert "Rechazada" in (resultado.error or "")
 
     # 5. Validar que el feedback fue archivado para aprendizaje por rechazo
-    feedbacks = persistencia_service.obtener_feedback(alerta_s4.alerta_id)
+    feedbacks = persistencia_service.obtener_feedback(huella=alerta_s4.huella_causa)
     assert len(feedbacks) >= 1
     assert feedbacks[0]["motivo"] == motivo_rechazo
     assert feedbacks[0]["actor"] == "usuario:gerente.comercial"

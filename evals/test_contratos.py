@@ -12,10 +12,9 @@ from contracts import (
     Alerta,
     AlertaVista,
     Borrador,
-    CentinelaConfig,
     CifraTrazable,
     CitaPolitica,
-    ConfigKpi,
+    ConfiguracionUpdate,
     ContactoCartera,
     DecisionRequest,
     DiagnosticoLLM,
@@ -241,7 +240,8 @@ def test_contratos_nuevos_0_13():
         run_id="run-sim-001",
         corte=date(2026, 8, 15),
         dias_avanzados=7,
-        pipeline_disparado=True,
+        alertas_detectadas=12,
+        alertas_nuevas=3,
     )
     assert sim_resp.dias_avanzados == 7
 
@@ -276,23 +276,12 @@ def test_contratos_nuevos_0_13():
     )
     assert vista.nombres_resueltos["C0496"] == "Supermercado El Sol"
 
-    # 3. ConfigKpi
-    config_kpi = ConfigKpi(
-        kpi=Kpi.MARGEN,
-        nombre="Margen Mínimo por Línea",
-        umbral_defecto=0.15,
-        umbral_actual=0.12,
-        responsable_email="gerencia.comercial@distribuidoraandina.com",
-        autonomia="propone",
-        activo=True,
+    # 3. ConfiguracionUpdate
+    upd = ConfiguracionUpdate(
+        umbrales={"dias_mora": 20},
+        autonomia={"ajuste_precio": "propone"},
+        actor="usuario:administrador",
     )
-    assert config_kpi.autonomia == "propone"
-
-    # 4. CentinelaConfig
-    cfg = CentinelaConfig(
-        clave="kpi_margen",
-        valor={"umbral": 0.12, "activo": True},
-        actualizado_en=datetime.now(timezone.utc),
-        actualizado_por="usuario:administrador",
-    )
-    assert cfg.clave == "kpi_margen"
+    assert upd.umbrales["dias_mora"] == 20
+    with pytest.raises(ValidationError):
+        ConfiguracionUpdate(autonomia={"ajuste_precio": "libre"}, actor="usuario:administrador")

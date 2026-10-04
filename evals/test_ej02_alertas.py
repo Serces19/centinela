@@ -41,7 +41,10 @@ def test_deteccion_escenarios_corte_2026_09_30():
     alr_s1 = next((a for a in alertas if a.huella_causa == "costo|PR08"), None)
     assert alr_s1 is not None, "Alerta S1 (costo|PR08) no fue detectada"
     assert alr_s1.severidad in (Severidad.ALTA, Severidad.CRITICA)
-    assert len(alr_s1.hallazgos) == 4
+    costos = [h for h in alr_s1.hallazgos if h.regla.startswith("OPE-POL-007/costo")]
+    assert len(costos) == 4
+    # La caída de margen de la línea Hogar se asocia a la misma causa (una causa = una alerta)
+    assert any(h.kpi.value == "margen_pct" and "linea" in {e.tipo.value for e in h.entidades} for h in alr_s1.hallazgos)
     skus_s1 = {e.id for h in alr_s1.hallazgos for e in h.entidades if e.tipo == TipoEntidad.SKU}
     assert skus_s1 == {"P0001", "P0006", "P0011", "P0021"}
     assert alr_s1.dinero_en_riesgo_cop > 20_000_000
@@ -146,7 +149,7 @@ def test_deduplicacion_y_prioridad_s1():
     alertas_pr08 = [a for a in alertas if a.huella_causa == "costo|PR08"]
     assert len(alertas_pr08) == 1
     alr = alertas_pr08[0]
-    assert len(alr.hallazgos) == 4
+    assert len([h for h in alr.hallazgos if h.regla.startswith("OPE-POL-007/costo")]) == 4
 
     # Cada alerta tiene un ID determinista válido
     assert alr.alerta_id.startswith(f"ALR-{corte.strftime('%Y%m%d')}-")

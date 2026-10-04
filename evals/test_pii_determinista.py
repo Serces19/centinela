@@ -65,6 +65,8 @@ def test_hallazgos_sin_nombres_vendedores(nombres_vendedores):
 
                 # Verificar que las entidades solo tengan IDs formales
                 for ent in hallazgo.entidades:
+                    if ent.tipo.value == "linea":   # línea de producto: no es un dato personal
+                        continue
                     assert ent.id.startswith(("V", "C", "PR", "P", "BOD")), f"ID no conforme: {ent.id}"
 
 

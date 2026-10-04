@@ -9,21 +9,17 @@ Garantiza:
 - Generación de `ConsultaRegistrada` con hash SHA-256 canónico del resultado.
 """
 
-from datetime import date, datetime, timezone
-from decimal import Decimal
-import hashlib
-import json
+from datetime import date
 import re
-import uuid
 from typing import Any
 
 import duckdb
 from fastmcp import FastMCP
 
-from contracts.base import Hash256, Vista
-from contracts.evidencia import ConsultaRegistrada
+from contracts.base import Vista
 from contracts.herramientas import ConsultarVistaIn, ConsultarVistaOut, Filtro
 from semantic.db import FECHA_CORTE_DEFECTO, get_duckdb_connection
+from services.registro_consultas import registrar_resultado, renderizar_sql, serializar_valor
 
 # Servidor FastMCP in-process
 mcp = FastMCP("centinela-tools")
@@ -32,7 +28,7 @@ mcp = FastMCP("centinela-tools")
 COLUMNAS_PERMITIDAS: dict[str, set[str]] = {
     Vista.VENTAS.value: {
         "pedido_id", "fecha", "cliente_id", "cliente", "segmento", "vendedor_id",
-        "ciudad", "region", "linea_n", "sku", "producto", "linea", "cantidad",
+        "ciudad", "region", "linea_n", "sku", "producto", "linea", "proveedor_id", "cantidad",
         "precio_lista", "precio_unitario", "descuento_pct", "aprobacion_especial",
         "valor_neto", "costo_total", "margen_bruto", "estado",
     },
@@ -47,12 +43,12 @@ COLUMNAS_PERMITIDAS: dict[str, set[str]] = {
         "cliente_id", "mes_factura", "dias_pago_prom", "facturas_pagadas",
     },
     Vista.COBERTURA.value: {
-        "sku", "nombre", "linea", "clase_abc", "bodega_id", "existencia",
+        "sku", "nombre", "linea", "proveedor_id", "clase_abc", "bodega_id", "existencia",
         "demanda_prom_30d", "cobertura_dias", "unidades_pendientes",
     },
     Vista.DESCUENTOS.value: {
         "pedido_id", "fecha", "cliente_id", "cliente", "segmento", "vendedor_id",
-        "ciudad", "region", "linea_n", "sku", "producto", "linea", "cantidad",
+        "ciudad", "region", "linea_n", "sku", "producto", "linea", "proveedor_id", "cantidad",
         "precio_lista", "precio_unitario", "descuento_pct", "aprobacion_especial",
         "valor_neto", "costo_total", "margen_bruto", "estado",
         "tope_descuento_pct", "descuento_en_exceso",
@@ -138,39 +134,11 @@ def _validar_ordenar_por(ordenar_por: str, permitidas: set[str]) -> str:
     return f"{col} {direccion}"
 
 
-def _serializar_valor(val: Any) -> str | int | float | None:
-    """Convierte tipos de DuckDB a tipos serializables en contratos."""
-    if val is None:
-        return None
-    if isinstance(val, (int, float, str)):
-        return val
-    if isinstance(val, Decimal):
-        return int(val) if val % 1 == 0 else float(val)
-    if isinstance(val, (date, datetime)):
-        return val.isoformat()
-    return str(val)
-
-
-def _renderizar_sql_seguro(sql_base: str, params: list[Any]) -> str:
-    """Genera representación de SQL con parámetros para trazabilidad."""
-    sql = sql_base
-    for p in params:
-        if isinstance(p, (int, float)):
-            rep = str(p)
-        elif isinstance(p, str):
-            rep = "'" + p.replace("'", "''") + "'"
-        elif isinstance(p, (date, datetime)):
-            rep = f"DATE '{p.isoformat()}'"
-        else:
-            rep = repr(p)
-        sql = sql.replace("?", rep, 1)
-    return sql
-
-
 def consultar_vista(
     params: ConsultarVistaIn,
     corte: date | None = None,
     con: Any = None,
+    descripcion: str = "",
 ) -> ConsultarVistaOut:
     """Ejecuta una consulta validada contra la capa semántica de Centinela.
 
@@ -260,28 +228,20 @@ def consultar_vista(
             con.close()
 
     filas_serializadas: list[list[str | int | float | None]] = [
-        [_serializar_valor(val) for val in row] for row in raw_rows
+        [serializar_valor(val) for val in row] for row in raw_rows
     ]
 
-    # Calcular hash SHA-256 canónico del resultado
-    canon_json = json.dumps(filas_serializadas, sort_keys=True, ensure_ascii=False)
-    resultado_hash = hashlib.sha256(canon_json.encode("utf-8")).hexdigest()
-
-    consulta_id = f"Q-{uuid.uuid4().hex[:12]}"
-    sql_renderizado = _renderizar_sql_seguro(sql, sql_params)
-
-    consulta = ConsultaRegistrada(
-        consulta_id=consulta_id,
-        vista=params.vista,
-        sql_renderizado=sql_renderizado,
+    resultado = registrar_resultado(
+        vista=vista_val,
+        sql_renderizado=renderizar_sql(sql, sql_params),
         corte=fecha_corte_efectiva,
-        filas=len(filas_serializadas),
-        resultado_hash=resultado_hash,
-        ejecutada_en=datetime.now(timezone.utc),
+        columnas=col_names,
+        filas=filas_serializadas,
+        descripcion=descripcion,
     )
 
     return ConsultarVistaOut(
-        consulta=consulta,
+        consulta=resultado.consulta,
         columnas=col_names,
         filas=filas_serializadas,
         truncado=len(filas_serializadas) >= params.limite,

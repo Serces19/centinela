@@ -78,4 +78,5 @@ class SimulacionResp(Contrato):
     run_id: str
     corte: date
     dias_avanzados: int = Field(ge=0)
-    pipeline_disparado: bool = True
+    alertas_detectadas: int = Field(default=0, ge=0)   # causas que el Vigía detecta al nuevo corte
+    alertas_nuevas: int = Field(default=0, ge=0)       # causas detectadas por primera vez

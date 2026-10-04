@@ -1,6 +1,6 @@
 # backend/contracts/alertas.py
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -44,6 +44,7 @@ class Alerta(Contrato):
     corte_creacion: date
     creada_en: datetime
     version: int = Field(ge=1)                  # bloqueo optimista en DynamoDB
+    paso_actual: Literal["ninguno", "analista", "estratega"] = "ninguno"   # agente en curso (se muestra en la UI)
 
     def avanzar(self, destino: EstadoAlerta) -> "Alerta":
         if not transicion_valida(self.estado, destino):
@@ -57,3 +58,13 @@ class AlertaVista(Contrato):
     nombres_resueltos: dict[str, str] = Field(default_factory=dict)   # { "V03": "Carlos Gómez", ... }
     propuesta: Any | None = None                                     # Propuesta si existe
     consultas: list[Any] = Field(default_factory=list)               # ConsultaRegistrada si se requieren
+
+
+class ResumenAlertas(Contrato):
+    """Resumen de la bandeja al corte actual: dinero en riesgo y las decisiones clave."""
+    corte: date
+    total_dinero_en_riesgo_cop: Pesos = Field(ge=0)       # solo alertas pendientes, una por causa
+    pendientes: int = Field(ge=0)
+    resueltas: int = Field(ge=0)
+    por_severidad: dict[str, int] = Field(default_factory=dict)
+    decisiones_clave: list[AlertaVista] = Field(default_factory=list)

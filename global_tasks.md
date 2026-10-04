@@ -41,7 +41,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
 - [x] **R2 · Orquestación simple y sin código muerto.** `[BAK]`
   - Hecho: `agents/graph.py` pasó a `agents/pipeline.py` sin LangGraph ni checkpointer simulado (`langgraph` fuera de las dependencias, `EstadoGrafo` e `InterruptPayload` fuera de los contratos), el pipeline es idempotente por estado y la generación de borradores quedó en una sola función.
   - Los respaldos que inventan datos (`_crear_accion_fallback`, diagnóstico de respaldo) se eliminan en R7, donde se reescriben el Analista y el Estratega.
-- [ ] **R3 · Una alerta por causa y bandeja ordenada (C3, C4).** `[BAK]`
+- [x] **R3 · Una alerta por causa y bandeja ordenada (C3, C4)** (backend listo y probado; la bandeja de la UI se rehace en R9). `[BAK]`
   - a. `alerta_id` estable por `huella_causa` (se crea en la primera detección y no cambia entre cortes).
   - b. `GET /alertas`: ejecuta el Vigía al corte actual, une cada hallazgo con el registro persistido por huella (estado, propuesta, versión) y devuelve valores del corte actual; las causas que ya no se detectan no se muestran.
   - c. Agrupar la cartera: un cliente = una alerta (une saldo vencido y días de pago); `dinero_en_riesgo` sin doble conteo.
@@ -49,7 +49,9 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - e. Endpoint de resumen: `GET /alertas/resumen` → total de dinero en riesgo (sin doble conteo), número de alertas por severidad y **las 3 decisiones clave** (mayor $ × severidad).
   - f. `POST /simulacion/reiniciar` borra alertas, propuestas, resultados, trazas y feedback de la demo (no la bitácora) y vuelve al corte limpio.
   - **Hecho cuando:** 0 huellas duplicadas en la respuesta; el total de dinero en riesgo no supera la cartera abierta; avanzar el reloj muestra S2-S5 sin quedarse con las alertas viejas.
-- [ ] **R4 · Reloj que dispara de verdad (C8).** `[BAK]`
+- [x] **R3b · Consultas registradas (trazabilidad real).** `[BAK]`
+  - Hecho: toda regla del Vigía y toda llamada a `consultar_vista` produce una `ConsultaRegistrada` (SQL con el corte, columnas, hasta 300 filas, hash del resultado, `consulta_id` determinista), se persiste con la alerta y se sirve en `GET /consultas/{id}`. Pendiente en R9: mostrarla en el nivel 3 del detalle (hoy solo se listan ids).
+- [x] **R4 · Reloj que dispara de verdad (C8)** (backend: `avanzar` persiste el Vigía y devuelve `alertas_detectadas`/`alertas_nuevas`; `paso_actual` en la alerta; el encadenado del análisis en la UI va en R9). `[BAK]`
   - a. `POST /simulacion/avanzar`: mueve el corte, ejecuta y persiste el Vigía, y responde con `alertas_nuevas` (no `pipeline_disparado` falso).
   - b. Campo `paso_actual` en la alerta (`vigia`/`analista`/`estratega`/`ninguno`), actualizado por el pipeline.
   - c. La UI encadena el análisis de las 3 decisiones clave tras avanzar el reloj.
@@ -82,7 +84,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - c. Mostrar `paso_actual`; chat con gráfico; bitácora general (R10); hitos del reloj solo con fechas, sin nombres de entidades.
   - d. Revisar teclado, contraste y vista móvil.
   - **Hecho cuando:** `grep -rn "PR08\|C0496\|P0119\|V03\|C0061" frontend/src` no devuelve nada, y la bandeja con `SEMILLA=12` muestra los escenarios de esa semilla.
-- [ ] **R10 · Bitácora general.** `[BAK]` `[FRO]` `GET /bitacora` sin `alerta_id` (paginado, filtro por actor y evento) y vista de auditoría con "quién aprobó qué y cuándo".
+- [x] **R10 · Bitácora general** (backend listo; vista en R9). `[BAK]` `[FRO]` `GET /bitacora` sin `alerta_id` (paginado, filtro por actor y evento) y vista de auditoría con "quién aprobó qué y cuándo".
 - [ ] **R11 · Credibilidad de los documentos (C8).** `[NEG]` `[BAK]`
   - a. Backtest: primera detección del **escenario** (la entidad afectada con las reglas del propio escenario, no cualquier alerta de la entidad); quitar la columna "detección tradicional" supuesta o presentarla como supuesto.
   - b. Unificar el impacto de S1 con lo que calcula el sistema; calcular el costo por alerta con trazas reales (ya medidas) y derivar el ROI de ahí.

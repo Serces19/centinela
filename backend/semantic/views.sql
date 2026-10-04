@@ -5,7 +5,7 @@
 -- 1. Ventas netas con costo y margen por línea de pedido (excluye pedidos cancelados y fecha posterior a corte)
 CREATE OR REPLACE TEMP VIEW v_ventas AS
 SELECT p.pedido_id, p.fecha, p.cliente_id, c.nombre AS cliente, c.segmento, p.vendedor_id, p.ciudad, c.region,
-       d.linea_n, d.sku, pr.nombre AS producto, pr.linea, d.cantidad, d.precio_lista, d.precio_unitario,
+       d.linea_n, d.sku, pr.nombre AS producto, pr.linea, pr.proveedor_id, d.cantidad, d.precio_lista, d.precio_unitario,
        d.descuento_pct, d.aprobacion_especial, d.valor_neto, d.cantidad * d.costo_unitario AS costo_total,
        d.valor_neto - d.cantidad * d.costo_unitario AS margen_bruto, p.estado
 FROM pedidos p 
@@ -71,7 +71,7 @@ pend AS (
     WHERE p.estado = 'Pendiente de despacho' AND p.fecha <= fecha_corte()
     GROUP BY 1, 2
 )
-SELECT i.sku, pr.nombre, pr.linea, pr.clase_abc, i.bodega_id, i.existencia_final AS existencia,
+SELECT i.sku, pr.nombre, pr.linea, pr.proveedor_id, pr.clase_abc, i.bodega_id, i.existencia_final AS existencia,
        round(dem.demanda_prom_30d, 1) AS demanda_prom_30d,
        round(i.existencia_final / nullif(dem.demanda_prom_30d, 0), 1) AS cobertura_dias,
        coalesce(pend.unidades_pendientes, 0) AS unidades_pendientes

@@ -15,7 +15,7 @@ from .agentes import (
     ReactivarCliente,
     RevisionDescuentos,
 )
-from .alertas import Alerta, AlertaVista, Hallazgo
+from .alertas import Alerta, AlertaVista, Hallazgo, ResumenAlertas
 from .base import (
     AccionId,
     AlertaId,
@@ -42,7 +42,13 @@ from .base import (
     Vista,
 )
 from .bitacora import EntradaBitacora, Evento, canonico, verificar_cadena
-from .configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO, CentinelaConfig, ConfigKpi
+from .configuracion import (
+    CORTE_INICIAL_LIMPIO,
+    FECHA_CORTE_DEFECTO,
+    ConfigUmbral,
+    ConfiguracionUpdate,
+    ConfiguracionVigia,
+)
 from .decision import Borrador, DecisionRequest, ResultadoEjecucion
 from .evidencia import CifraTrazable, CitaPolitica, ConsultaRegistrada, Unidad, numeros_sueltos
 from .herramientas import (
@@ -103,6 +109,7 @@ __all__ = [
     "Hallazgo",
     "Alerta",
     "AlertaVista",
+    "ResumenAlertas",
     # Agentes
     "DiagnosticoLLM",
     "AjustePrecio",
@@ -147,8 +154,9 @@ __all__ = [
     "CrearBorradorIn",
     "PipelineEvent",
     # Configuracion
-    "ConfigKpi",
-    "CentinelaConfig",
+    "ConfigUmbral",
+    "ConfiguracionVigia",
+    "ConfiguracionUpdate",
     "CORTE_INICIAL_LIMPIO",
     "FECHA_CORTE_DEFECTO",
 ]

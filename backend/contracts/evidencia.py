@@ -9,19 +9,25 @@ from .base import (
     ConsultaId,
     Contrato,
     Hash256,
-    Vista,
 )
 
 Unidad = Literal["COP", "%", "pp", "dias", "unidades", "veces", "lineas"]
 
 
 class ConsultaRegistrada(Contrato):
-    """Una consulta ejecutada por una herramienta. Se guarda en `trazas` y se muestra en 'Cómo llegué aquí'."""
+    """Una consulta ejecutada contra la capa semántica. Se guarda en `trazas` y se muestra en 'Cómo llegué aquí'.
+
+    El identificador es determinista (hash del SQL renderizado y del corte): la misma consulta al mismo
+    corte produce el mismo `consulta_id` y el mismo `resultado_hash`, por lo que es reproducible.
+    """
     consulta_id: ConsultaId
-    vista: Vista
+    vista: str                                    # vista v_* o tabla base consultada
+    descripcion: str = Field(default="", max_length=200)
     sql_renderizado: str
     corte: date
     filas: int = Field(ge=0)
+    columnas: list[str] = Field(default_factory=list)
+    filas_muestra: list[list[str | int | float | None]] = Field(default_factory=list, max_length=300)
     resultado_hash: Hash256
     ejecutada_en: datetime
 
