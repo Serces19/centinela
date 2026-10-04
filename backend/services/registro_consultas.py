@@ -96,6 +96,11 @@ def registrar_resultado(
     _CACHE.move_to_end(consulta_id)
     while len(_CACHE) > _CACHE_MAX:
         _CACHE.popitem(last=False)
+    try:
+        from services.persistencia import persistencia_service
+        persistencia_service.guardar_consulta(consulta)
+    except Exception:
+        pass
     return ResultadoConsulta(consulta=consulta, columnas=columnas, filas=filas)
 
 

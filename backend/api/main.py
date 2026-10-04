@@ -428,9 +428,53 @@ def tomar_decision_endpoint(alerta_id: str, decision: DecisionRequest, request: 
 # -----------------------------------------------------------------------------
 # Consultas registradas ("Cómo llegué aquí")
 # -----------------------------------------------------------------------------
+def _resolver_consulta_en_alertas(consulta_id: str):
+    """Intenta reconstruir una consulta registrada si pertenece a alguna alerta o propuesta persistida."""
+    try:
+        from semantic.db import get_duckdb_connection
+        from agents.evidencia import construir_ficha
+        from agents.playbook import generar_candidatas
+        from tools.impacto import calcular_impacto_economico
+        from services.umbrales import cargar_umbrales
+
+        alertas = persistencia_service.listar_alertas()
+        propuestas = persistencia_service.obtener_propuestas([a.alerta_id for a in alertas])
+        corte_actual = persistencia_service.obtener_reloj()["corte"]
+
+        for a in alertas:
+            p = propuestas.get(a.alerta_id)
+            cids: set[str] = set()
+            if p:
+                if p.diagnostico:
+                    cids.update(c.consulta_id for c in p.diagnostico.cifras)
+                cids.update(c.consulta_id for c in p.cifras)
+                for acc in p.acciones:
+                    if acc.impacto and acc.impacto.consulta_ids:
+                        cids.update(acc.impacto.consulta_ids)
+            for h in a.hallazgos:
+                cids.update(h.consulta_ids)
+
+            if consulta_id in cids:
+                corte = a.hallazgos[0].corte if a.hallazgos else corte_actual
+                con = get_duckdb_connection(corte)
+                ficha = construir_ficha(a, corte, con)
+                cands = generar_candidatas(a, ficha, cargar_umbrales())
+                for c in cands:
+                    calcular_impacto_economico(c.parametros, a, corte, con)
+
+                rec = consulta_en_cache(consulta_id) or persistencia_service.obtener_consulta(consulta_id)
+                if rec:
+                    return rec
+    except Exception as e:
+        logger.warning("Fallo al auto-resolver consulta %s: %s", consulta_id, e)
+    return None
+
+
 @app.get("/consultas/{consulta_id}", tags=["Consultas"])
 def obtener_consulta(consulta_id: str, request: Request):
     consulta = persistencia_service.obtener_consulta(consulta_id) or consulta_en_cache(consulta_id)
+    if consulta is None:
+        consulta = _resolver_consulta_en_alertas(consulta_id)
     if consulta is None:
         return _error(request, "no_encontrado", f"Consulta '{consulta_id}' no encontrada.", 404)
     return consulta.model_dump(mode="json")

@@ -149,3 +149,24 @@ def test_idempotencia_persistencia_alertas(client):
     bit2 = client.get(f"/bitacora/{alerta_id}").json()
     # No se debe haber agregado una segunda entrada 'alerta_creada' idéntica
     assert bit2["total_entradas"] == 1
+
+
+def test_obtener_consulta_registrada(client):
+    """Verifica que el endpoint /consultas/{id} retorne el SQL, corte, hash y filas."""
+    resp = client.get("/alertas?corte=2026-08-15&persistir=true")
+    assert resp.status_code == 200
+    alertas = resp.json()
+    assert len(alertas) > 0
+
+    cid = alertas[0]["alerta"]["hallazgos"][0]["consulta_ids"][0]
+    resp_q = client.get(f"/consultas/{cid}")
+    assert resp_q.status_code == 200
+    q_data = resp_q.json()
+    assert q_data["consulta_id"] == cid
+    assert "SELECT" in q_data["sql_renderizado"]
+    assert len(q_data["resultado_hash"]) == 64
+    assert q_data["filas"] >= 0
+
+    # Consulta inexistente
+    resp_404 = client.get("/consultas/Q-000000000000")
+    assert resp_404.status_code == 404

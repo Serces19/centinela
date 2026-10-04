@@ -235,6 +235,23 @@ class PersistenciaService:
             self._mem_propuestas[propuesta.alerta_id] = propuesta.model_dump(mode="json")
             return True
 
+        # Persistir todas las consultas referenciadas por la propuesta
+        try:
+            from services.registro_consultas import consulta_en_cache
+            cids: set[str] = set()
+            if propuesta.diagnostico:
+                cids.update(c.consulta_id for c in propuesta.diagnostico.cifras)
+            cids.update(c.consulta_id for c in propuesta.cifras)
+            for acc in propuesta.acciones:
+                if acc.impacto and acc.impacto.consulta_ids:
+                    cids.update(acc.impacto.consulta_ids)
+            for cid in cids:
+                c = consulta_en_cache(cid)
+                if c is not None:
+                    self.guardar_consulta(c)
+        except Exception as e:
+            logger.warning("Fallo no crítico al persistir consultas de propuesta %s: %s", propuesta.alerta_id, e)
+
         item = {
             "alerta_id": propuesta.alerta_id,
             "tipo_registro": "PROPUESTA",
