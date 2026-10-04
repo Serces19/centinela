@@ -98,7 +98,6 @@ data "aws_iam_policy_document" "lambda_dynamodb" {
       aws_dynamodb_table.alertas.arn,
       "${aws_dynamodb_table.alertas.arn}/index/*",
       aws_dynamodb_table.bitacora.arn,
-      aws_dynamodb_table.checkpoints.arn,
       aws_dynamodb_table.trazas.arn,
       aws_dynamodb_table.reloj.arn,
       aws_dynamodb_table.config.arn,

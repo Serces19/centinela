@@ -1,3 +1,5 @@
+> **Documento histórico de planeación.** Algunas decisiones cambiaron (p. ej. se eliminó LangGraph, la KB tiene su propio índice, el chat es un agente con herramientas). El estado vigente está en `README.md` y `docs/`.
+
 # Plan de Implementación: Sistema Centinela (Hackathon By Paseo)
 
 ## Goal Description
@@ -65,7 +67,7 @@ Verificadas contra los CSV oficiales **excluyendo pedidos cancelados**, que es l
 7. **Privacidad y seguridad:** Bedrock Guardrails (PII anonimizada + ataques de prompt) y envío de IDs en vez de nombres.
 8. **Capa semántica:** DuckDB (`centinela.duckdb` horneado en la imagen) con las 7 vistas parametrizadas por `corte`.
 9. **Herramientas:** FastMCP in-process.
-10. **Monitorización (aprobada):** CloudWatch + Bedrock invocation logging + X-Ray + tabla `trazas` + promptfoo; sin Langfuse/LangSmith en el MVP ([docs/05_monitorizacion.md](docs/05_monitorizacion.md)).
+10. **Monitorización (aprobada):** CloudWatch + Bedrock invocation logging + X-Ray + tabla `trazas` + promptfoo; sin Langfuse/LangSmith en el MVP ([docs/02_arquitectura.md](docs/02_arquitectura.md)).
 11. **Contratos:** Pydantic v2 en todas las fronteras ([docs/03_contratos_datos.md](docs/03_contratos_datos.md)).
 12. **Opcionales al final del roadmap:** backtest con reloj simulado y explorador de cola larga.
 

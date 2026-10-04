@@ -1,7 +1,7 @@
 # global_tasks.md · Roadmap paso a paso de Centinela
 
 Stack: AWS Lambda contenedor (FastAPI + Lambda Web Adapter, Function URL con streaming) · AWS Amplify · LangGraph · Bedrock (Claude Haiku 4.5, Knowledge Base en S3 + S3 Vectors, Guardrails) · DuckDB · DynamoDB · CloudWatch · Pydantic v2 · Terraform. Región `us-east-1`.
-Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/02_arquitectura_aws.md) · [03_contratos](docs/03_contratos_datos.md) · [04_diagramas](docs/04_diagramas.md) · [05_monitorizacion](docs/05_monitorizacion.md).
+Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/02_arquitectura.md) · [03_contratos](docs/03_contratos_datos.md) · [04_diagramas](docs/02_arquitectura.md) · [05_monitorizacion](docs/02_arquitectura.md).
 
 ---
 
@@ -29,7 +29,7 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 
 ## Fase R · Remediación de la auditoría (PRIORIDAD MÁXIMA: dejar el sistema listo para los jurados)
 
-Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una tarea a la vez; cada tarea termina con pruebas en verde y un commit; al terminar una tarea que cambie arquitectura o flujo se actualiza el doc correspondiente; los umbrales y las cifras salen de la política y de los datos, nunca de entidades fijas.
+Origen: [docs/05_auditoria.md](docs/05_auditoria.md). Reglas de ejecución: una tarea a la vez; cada tarea termina con pruebas en verde y un commit; al terminar una tarea que cambie arquitectura o flujo se actualiza el doc correspondiente; los umbrales y las cifras salen de la política y de los datos, nunca de entidades fijas.
 **Decisión de orquestación (cierra el plan B):** lo que corre en producción es una máquina de estados explícita (`procesar_alerta_completa` + `aplicar_decision_humana`), no el grafo de LangGraph, que nunca se invoca. Se elimina el grafo y el checkpointer simulado; la pausa de aprobación humana es el estado persistido `propuesta`.
 
 - [x] **R0 · Línea base** (90 pruebas pasan, 5 fallan: todas de `test_knowledge_base`, por la KB contaminada y por la sección genérica 'Recuperado de Knowledge Base'). Ejecutar `pytest evals` completo y guardar el resultado; anotar la URL de la API y de Amplify; confirmar que `.env` no está versionado.
@@ -60,7 +60,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - Hecho: vector bucket e índice propios (`centinela-vectors-<cuenta>/politicas`, `scripts/provision_vectores.py`); KB nueva `centinela-politicas-kb` (id `6WKO5PZCW3`) aplicada con Terraform; una sola copia de cada política con nombre canónico; los 12 vectores huérfanos de Centinela se borraron del índice compartido (los de la otra KB no se tocaron).
   - `knowledge.py` quedó en un solo camino (KB): el documento sale de la URI de S3, se descartan resultados ajenos y duplicados, la sección se deduce de los encabezados de cada política; sin KB devuelve vacío. Se eliminó el corpus embebido, el modo híbrido y la caché de embeddings.
   - `scripts/sync_knowledge_base.py` localiza la KB por nombre, ingiere y verifica 5 consultas (solo políticas, sin duplicados). `evals/test_knowledge_base.py`: 12 pruebas pasan.
-- [x] **R6 · Configuración real (C7)** (backend + UI verificados).** `[BAK]` `[FRO]`
+- [x] **R6 · Configuración real (C7)** (backend + UI verificados)** `[BAK]` `[FRO]`
   - a. Contrato `ConfigKpi` y tabla `centinela_config`: umbrales por KPI con sus valores por defecto tomados de `metricas.yaml` y de la política, y autonomía por tipo de acción (Informa/Propone/Ejecuta).
   - b. `GET /config` y `PUT /config` (validados).
   - c. El Vigía lee los umbrales (margen, días de mora, cobertura, descuento, intervalo, costo %) y la autonomía limita al Ejecutor (`Informa` no genera borradores).
@@ -76,14 +76,14 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - Hecho: el chat es un agente (Haiku 4.5) con herramientas `consultar_vista` (SQL parametrizado con agregados, `count(distinct)` y orden por alias) y `buscar_politica`, que responde con la herramienta `responder`: texto con marcadores `{cN}` y referencias a celdas de las consultas. **El servidor lee los valores** (`verificar_respuesta`); el modelo no escribe números (salvo umbrales literales de la política recuperada y números de nombres de producto devueltos por la consulta). Eventos SSE: `paso` (en vivo) → `token` → `cifra` → `grafico` → `fin` (consultas y costo real de Bedrock). Guardrail en la pregunta y en la respuesta; sin datos → "no tengo evidencia suficiente".
   - Hecho: se eliminó la lógica por palabras clave y `CENTINELA_BEDROCK_CHAT`; `proveedor_id` se añadió a `v_ventas` y `v_cobertura_inventario`; las consultas del chat quedan registradas y se sirven en `/consultas/{id}`.
   - Verificado con Bedrock real (9 pruebas, 3 corridas seguidas): "¿qué otros clientes compran los SKU P0001 y P0006?", "¿qué otros SKU le compramos al proveedor PR08?", la anclada a S1, política con umbral literal, gráfico con serie real, fuera de datos, inyección.
-- [x] **R9 · Frontend sin entidades fijas (C3)** (verificado en navegador: bandeja, detalle, chat, rechazo→reabrir→aprendizaje, bitácora).** `[FRO]`
+- [x] **R9 · Frontend sin entidades fijas (C3)** (verificado en navegador: bandeja, detalle, chat, rechazo→reabrir→aprendizaje, bitácora)** `[FRO]`
   - a. Borrar `clasificarEscenario`, `esAlertaEstrategica`, `esCorteInicialLimpio` y los títulos con cifras fijas; usar `GET /alertas/resumen`.
   - b. Bandeja: banner con el dinero en riesgo y las 3 decisiones clave; el resto plegado y ordenado.
   - c. Mostrar `paso_actual`; chat con gráfico; bitácora general (R10); hitos del reloj solo con fechas, sin nombres de entidades.
   - d. Revisar teclado, contraste y vista móvil.
   - **Hecho cuando:** `grep -rn "PR08\|C0496\|P0119\|V03\|C0061" frontend/src` no devuelve nada, y la bandeja con `SEMILLA=12` muestra los escenarios de esa semilla.
 - [x] **R10 · Bitácora general** (backend listo; vista en R9). `[BAK]` `[FRO]` `GET /bitacora` sin `alerta_id` (paginado, filtro por actor y evento) y vista de auditoría con "quién aprobó qué y cuándo".
-- [ ] **R11 · Credibilidad de los documentos (C8).** `[NEG]` `[BAK]`
+- [x] **R11 · Credibilidad de los documentos (C8)** (docs consolidados en 5 + informes generados; backtest y evaluación rehechos). `[NEG]` `[BAK]`
   - a. Backtest: primera detección del **escenario** (la entidad afectada con las reglas del propio escenario, no cualquier alerta de la entidad); quitar la columna "detección tradicional" supuesta o presentarla como supuesto.
   - b. Unificar el impacto de S1 con lo que calcula el sistema; calcular el costo por alerta con trazas reales (ya medidas) y derivar el ROI de ahí.
   - c. EJ-02.1 con criterio honesto: el corte limpio no tiene alertas de S1-S5; el resto del ruido se mide y se reporta.
@@ -96,7 +96,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - b. Ejecutar toda la suite, la evaluación del jurado y `SEMILLA=12` y `42`.
   - c. Repetir en producción las 3 preguntas del chat, el flujo completo de S1 (reloj → alerta → detalle → chat → aprobar → bitácora) y la prueba de inyección.
   - d. Ensayo cronometrado de la demo (≤ 5 min).
-  - **Hecho cuando:** checklist de las láminas 7, 9, 15-19 en verde con evidencia en `docs/10_auditoria.md` (§ Estado final).
+  - **Hecho cuando:** checklist de las láminas 7, 9, 15-19 en verde con evidencia en `docs/05_auditoria.md` (§ Estado final).
 
 ---
 
@@ -349,7 +349,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
 ---
 
 ## Fase 3b · Monitorización (Día 2 tarde) `[INF]`
-Diseño en [05_monitorizacion](docs/05_monitorizacion.md).
+Diseño en [05_monitorizacion](docs/02_arquitectura.md).
 - [x] **3b.1 Logger JSON.** Servicio `backend/services/telemetry.py` con campos `ts, nivel, request_id, run_id, alerta_id, agente, evento`; middleware FastAPI que propaga y ancla `x-request-id`; sanitización rigurosa de PII y cifras en los logs.
 - [x] **3b.2 Métricas EMF** (namespace `Centinela`): Formato canónico AWS EMF implementado en `backend/services/telemetry.py`. Emisión asíncrona de `AlertasGeneradas`, `PipelineLatenciaMs`, `LlmTokensEntrada/Salida`, `CostoUsdPorAlerta`, `ValidacionFallida`, `ReintentosLlm`, `SinEvidencia`, `GuardrailIntervino`, `BitacoraCadenaRota`, `AprobacionesHumanas`, `Rechazos`. Evaluado en `evals/test_telemetry_emf.py` (11/11 tests pasando).
 - [x] **3b.3 Logging de Bedrock y trazas.** Trazas de inferencia con tokens, latencia ms y costo USD persistidas en DynamoDB `centinela_trazas` con TTL 30 días (`guardar_traza`) e integradas con la visualización UI "Cómo llegué aquí".
@@ -376,12 +376,12 @@ Diseño en [05_monitorizacion](docs/05_monitorizacion.md).
   - b. Carga de cada dataset en DuckDB en memoria con las 7 vistas semánticas de `views.sql`.
   - c. Verificado en [`evals/test_multi_semilla.py`](evals/test_multi_semilla.py): S1-S5 detectados al 100% con las entidades dinámicas de cada semilla, demostrando cero hardcoding.
   - **Hecho cuando:** S1-S5 pasan en ambas semillas (2/2 tests PASSED).
-- [x] **4.6 Evaluación del jurado.** Ejecutada la matriz oficial en [`scripts/ejecutar_evaluacion_jurado.py`](scripts/ejecutar_evaluacion_jurado.py) (EJ-01 preguntas SQL con 0% de error, EJ-02 alertas por fecha con reloj simulado, EJ-03 seguridad y anonimización PII). Informes exportados en [`Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv`](Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv) y [`docs/06_informe_evaluacion_jurado.md`](docs/06_informe_evaluacion_jurado.md) con **11/11 casos aprobados (100%)**.
+- [x] **4.6 Evaluación del jurado.** Ejecutada la matriz oficial en [`scripts/ejecutar_evaluacion_jurado.py`](scripts/ejecutar_evaluacion_jurado.py) (EJ-01 preguntas SQL con 0% de error, EJ-02 alertas por fecha con reloj simulado, EJ-03 seguridad y anonimización PII). Informes exportados en [`Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv`](Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv) y [`docs/informes/evaluacion_jurado.md`](docs/informes/evaluacion_jurado.md) con **11/11 casos aprobados (100%)**.
 - [ ] **4.7 Plan B de demo.** Video grabado de la demo completa y entorno local (`uvicorn` + DuckDB + UI) que funcione sin Bedrock con respuestas pregrabadas **solo como respaldo etiquetado**, nunca presentado como en vivo.
 
 ### 4C. Demo y pitch `[NEG]` + todos
-- [x] **4.8 Guion de la demo (5 min).** Estructurado al segundo en [`docs/07_guion_demo_pitch.md`](docs/07_guion_demo_pitch.md): inicio en corte limpio 2026-06-18 → avance temporal a 2026-08-15 (alerta S1 $23.5M) → detalle en 3 niveles y citas OPE-POL-007 → chat anclado con streaming SSE → aprobación HITL con Active Persona Switcher y bitácora SHA-256 → corte final 2026-09-30 con 5 escenarios → neutralización de ataque EJ-03 → dashboard CloudWatch y ROI 10.000:1.
-- [x] **4.9 Pitch de negocio (3 min).** Estructurado en [`docs/07_guion_demo_pitch.md`](docs/07_guion_demo_pitch.md): dolor silencioso en distribución masiva, propuesta de valor Centinela, regla de oro determinista, auditoría criptográfica Ley 1581, observabilidad serverless a costo cero en reposo, hoja de ruta de ERPs y matriz de preguntas difíciles del jurado.
+- [x] **4.8 Guion de la demo (5 min).** Estructurado al segundo en [`docs/04_evaluacion_y_demo.md`](docs/04_evaluacion_y_demo.md): inicio en corte limpio 2026-06-18 → avance temporal a 2026-08-15 (alerta S1 $23.5M) → detalle en 3 niveles y citas OPE-POL-007 → chat anclado con streaming SSE → aprobación HITL con Active Persona Switcher y bitácora SHA-256 → corte final 2026-09-30 con 5 escenarios → neutralización de ataque EJ-03 → dashboard CloudWatch y ROI 10.000:1.
+- [x] **4.9 Pitch de negocio (3 min).** Estructurado en [`docs/04_evaluacion_y_demo.md`](docs/04_evaluacion_y_demo.md): dolor silencioso en distribución masiva, propuesta de valor Centinela, regla de oro determinista, auditoría criptográfica Ley 1581, observabilidad serverless a costo cero en reposo, hoja de ruta de ERPs y matriz de preguntas difíciles del jurado.
 - [ ] **4.10 Ensayos.** Mínimo tres ensayos completos cronometrados con el equipo; lista de preguntas difíciles del jurado y respuestas (costos, seguridad, qué pasa si el modelo se equivoca, privacidad Ley 1581).
 - [ ] **4.11 Lista de verificación 30 minutos antes.** Reloj reiniciado, provisioned concurrency activa, Bedrock respondiendo, KB sincronizada, `x-api-key` correcta, dashboard abierto, plan B listo.
 
@@ -391,11 +391,11 @@ Diseño en [05_monitorizacion](docs/05_monitorizacion.md).
 - [x] **O.1 Backtest con reloj simulado.**
   - a. Script maestro [`scripts/backtest_simulado.py`](scripts/backtest_simulado.py) que avanzó el corte día a día a lo largo del año operativo completo (365 días: 2025-10-01 al 2026-09-30) en 44.8 segundos sobre DuckDB in-memory.
   - b. Días de anticipación calculados: S1 (+16 días), S2 (+351 días), S3 (+1 día), S4 (+89 días), S5 (+352 días), S6 (+26 días).
-  - c. Informe oficial generado en [`docs/08_backtest_operacional.md`](docs/08_backtest_operacional.md) con tabla para el pitch y defensa del ROI.
+  - c. Informe oficial generado en [`docs/informes/backtest.md`](docs/informes/backtest.md) con tabla para el pitch y defensa del ROI.
   - **Hecho cuando:** tabla de escenarios con fechas reproducibles completada al 100%.
 - [x] **O.2 Explorador de cola larga.**
   - a. Script [`scripts/explorador_cola_larga.py`](scripts/explorador_cola_larga.py) con barrido analítico multidimensional sobre líneas de producto, canales de venta y vendedores.
   - b. Detección estadística robusta (MAD Z-Score) de márgenes atípicos y ventas bajo costo unitario.
   - c. Hipótesis formal del escenario oculto (S6) confirmada con cifras deterministas: SKU `P0097` (Leche en polvo x1) vendido sistemáticamente a un 15.7% bajo costo unitario por V06, V07, V15 y V11, acumulando pérdidas directas de margen.
-  - d. Informe exportado en [`docs/09_analisis_cola_larga_s6.md`](docs/09_analisis_cola_larga_s6.md).
+  - d. Informe exportado en [`docs/informes/cola_larga_s6.md`](docs/informes/cola_larga_s6.md).
   - **Hecho cuando:** hipótesis del escenario oculto sustentada con evidencia de datos reales sin alucinación. Verificado al 100%.

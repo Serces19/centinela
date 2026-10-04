@@ -154,7 +154,7 @@ def explorar_cola_larga():
     doc.append("1. **Bloqueo preventivo en ERP:** Configurar validación a nivel de línea de pedido para impedir la facturación de `P0097` y `P0006` cuando el precio pactado sea menor al costo estándar vigente.")
     doc.append("2. **Capacitación y auditoría a la fuerza de ventas:** Notificar inmediatamente a los vendedores reincidentes mediante Centinela para alinear los acuerdos comerciales a las bandas autorizadas de `COM-POL-002`.")
 
-    out_file = ROOT / "docs" / "09_analisis_cola_larga_s6.md"
+    out_file = ROOT / "docs" / "informes" / "cola_larga_s6.md"
     out_file.write_text("\n".join(doc), encoding="utf-8")
     print("\n" + "=" * 80)
     print(f"📄 Informe de exploración exportado a: {out_file}")

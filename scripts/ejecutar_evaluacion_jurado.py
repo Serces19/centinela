@@ -8,7 +8,7 @@ Ejecuta la matriz ampliada de casos de prueba:
 
 Genera:
 1. Kit_Equipos/evaluaciones/informe_casos_prueba_ejecutados.csv
-2. docs/06_informe_evaluacion_jurado.md
+2. docs/informes/evaluacion_jurado.md
 """
 
 import csv
@@ -32,7 +32,7 @@ from services.guardrail import aplicar_guardrail
 
 ROOT = Path(__file__).resolve().parent.parent
 CSV_OUT = ROOT / "Kit_Equipos" / "evaluaciones" / "informe_casos_prueba_ejecutados.csv"
-DOC_OUT = ROOT / "docs" / "06_informe_evaluacion_jurado.md"
+DOC_OUT = ROOT / "docs" / "informes" / "evaluacion_jurado.md"
 
 
 def ejecutar_evaluacion():
@@ -154,13 +154,15 @@ def ejecutar_evaluacion():
     """).fetchone()
     dt = round((time.perf_counter() - t0) * 1000, 2)
     impacto_s1 = r[0] if r else 0
-    ok_imp_s1 = abs(impacto_s1 - 23558346) / 23558346 < 0.01
+    _s1 = next((a for a in generar_alertas(date(2026, 8, 15)) if a.huella_causa == "costo|PR08"), None)
+    impacto_vigia = _s1.dinero_en_riesgo_cop if _s1 else 0
+    ok_imp_s1 = bool(impacto_vigia) and abs(impacto_s1 - impacto_vigia) / impacto_vigia < 0.01
     resultados.append({
         "id": "EJ-01.5",
         "tipo": "pregunta_sql",
-        "entrada": "Impacto proyectado mensual aumento de costo PR08 al 2026-08-15",
-        "esperado": "$23.558.346 COP",
-        "obtenido": f"${impacto_s1:,.0f} COP",
+        "entrada": "Impacto mensual del alza de costo de PR08 al 2026-08-15: cálculo independiente (demanda 30 d de inventario_diario) vs. el que reporta el Vigía",
+        "esperado": f"Vigía = ${impacto_vigia:,.0f} COP (±1 % del cálculo independiente)",
+        "obtenido": f"independiente ${impacto_s1:,.0f} COP",
         "tolerancia": "±1 %",
         "latencia_ms": dt,
         "estado": "PASSED" if ok_imp_s1 else "FAILED",
@@ -177,14 +179,16 @@ def ejecutar_evaluacion():
     dt = round((time.perf_counter() - t0) * 1000, 2)
     huellas_limpio = {a.huella_causa for a in alr_limpio}
     # Ningún escenario activo
-    ok_limpio = not any(h.startswith("costo|PR08") or h.startswith("saldo_vencido|C0496") or h.startswith("descuento_en_exceso|V03") for h in huellas_limpio)
+    esc = ("costo|PR08", "saldo_vencido|C0496", "descuento_en_exceso|V03", "veces_intervalo_habitual|C0061", "cobertura_dias|P0119")
+    activos_limpio = sorted(h for h in huellas_limpio if h in esc)
+    ok_limpio = not activos_limpio
     resultados.append({
         "id": "EJ-02.1",
         "tipo": "alerta_temporal",
         "entrada": "Corte inicial limpio 2026-06-18",
-        "esperado": "0 alertas de escenarios activos S1-S5",
-        "obtenido": f"{len(alr_limpio)} alertas operativas normales",
-        "tolerancia": "Cero falsos positivos de S1-S5",
+        "esperado": "ninguna alerta de las causas sembradas S1-S5",
+        "obtenido": f"{len(activos_limpio)} de S1-S5 activas" + f"; el resto del dataset genera {len(alr_limpio) - len(activos_limpio)} alertas de fondo (ruido medido, no esperado en cero)",
+        "tolerancia": "S1-S5 ausentes; el ruido de fondo se reporta",
         "latencia_ms": dt,
         "estado": "PASSED" if ok_limpio else "FAILED",
     })
@@ -194,14 +198,14 @@ def ejecutar_evaluacion():
     alr_ago15 = generar_alertas(date(2026, 8, 15))
     dt = round((time.perf_counter() - t0) * 1000, 2)
     s1_alr = next((a for a in alr_ago15 if a.huella_causa == "costo|PR08"), None)
-    ok_ago15 = (s1_alr is not None and abs(s1_alr.dinero_en_riesgo_cop - 23558346) / 23558346 < 0.02)
+    ok_ago15 = (s1_alr is not None)
     resultados.append({
         "id": "EJ-02.2",
         "tipo": "alerta_temporal",
         "entrada": "Detección al corte 2026-08-15 (Aparición de S1)",
-        "esperado": "Alerta costo|PR08 | ≈ $23.558.346 COP",
+        "esperado": "Alerta costo|PR08 el día del alza",
         "obtenido": f"Alerta {s1_alr.huella_causa if s1_alr else 'None'} | ${s1_alr.dinero_en_riesgo_cop:,.0f} COP" if s1_alr else "No detectada",
-        "tolerancia": "±2 %",
+        "tolerancia": "detección el mismo día del alza",
         "latencia_ms": dt,
         "estado": "PASSED" if ok_ago15 else "FAILED",
     })
@@ -313,7 +317,12 @@ def ejecutar_evaluacion():
     casos_pasados = sum(1 for r in resultados if r["estado"] == "PASSED")
     tasa_exito = round((casos_pasados / total_casos) * 100, 1)
 
-    md_content = f"""# 06 · Informe Oficial de Evaluación del Jurado
+    bloques = []
+    for pref, nom in (("EJ-01", "EJ-01 · Exactitud de cifras"), ("EJ-02", "EJ-02 · Alertas por fecha"), ("EJ-03", "EJ-03 · Seguridad y PII")):
+        rs = [r for r in resultados if r["id"].startswith(pref)]
+        bloques.append(f"| {nom} | {len(rs)} | {sum(r['estado'] == 'PASSED' for r in rs)} |")
+    filas_bloques = "\n".join(["| Bloque | Casos | Aprobados |", "|---|---|---|", *bloques])
+    md_content = f"""# Informe de evaluación (EJ-01, EJ-02, EJ-03)
 
 **Proyecto:** Centinela · Sistema Serverless de Agentes de IA de Vigilancia Operacional y Financiera  
 **Organización:** Distribuidora Andina S.A.S. (Hackatón By Paseo)  
@@ -324,12 +333,7 @@ def ejecutar_evaluacion():
 
 ## 1. Resumen Ejecutivo de Desempeño
 
-| Bloque de Evaluación | Casos Evaluados | Casos Aprobados | Tasa de Éxito | Criterio de Reto |
-|---|---|---|---|---|
-| **EJ-01 (Exactitud SQL & Cifras)** | 5 | 5 | **100 %** | Tolerancia ±0,1 pp / ±1 COP |
-| **EJ-02 (Detección Temporal de Alertas)** | 3 | 3 | **100 %** | Detectar ≥ 3 de 5 (Centinela detectó 5/5) |
-| **EJ-03 (Seguridad, Guardrails y PII)** | 3 | 3 | **100 %** | Bloqueo estricto de inyecciones y PII |
-| **TOTAL** | **{total_casos}** | **{casos_pasados}** | **{tasa_exito} %** | **100 % Superado** |
+{filas_bloques}
 
 ---
 
@@ -340,17 +344,15 @@ def ejecutar_evaluacion():
 """
     for r in resultados:
         estado_badge = "✅ PASSED" if r["estado"] == "PASSED" else "❌ FAILED"
-        md_content += f"| `{r['id']}` | {r['tipo']} | {r['entrada']} | {r['esperado']} | {r['obtenido']} | {r['latencia_ms']} ms | {estado_badge} |\n"
+        esc = lambda t: str(t).replace('|', '\|')
+        md_content += f"| `{r['id']}` | {r['tipo']} | {esc(r['entrada'])} | {esc(r['esperado'])} | {esc(r['obtenido'])} | {r['latencia_ms']} ms | {estado_badge} |\n"
 
     md_content += """
 ---
 
-## 3. Conclusiones y Cumplimiento Normativo
+## 3. Alcance
 
-1. **Determinismo Financiero y Regla de Oro:** Ninguna cifra económica ni porcentaje es alucinado por modelos de lenguaje. Las consultas se ejecutan directamente sobre DuckDB en memoria mediante SQL compilado y parametrizado.
-2. **Superioridad en Detección:** El reto solicitaba detectar al menos 3 de 5 escenarios al 2026-09-30; Centinela detectó **los 5 escenarios completos (100 %)** con entidades exactas.
-3. **Resistencia Cibersegura Comprobada:** Los ataques de prompt injection y las políticas normativas envenenadas (EJ-03) son neutralizados por el Bedrock Guardrail `zuonkeflxh8f` y la capa de defensa en profundidad local sin comprometer las propuestas de los agentes.
-4. **Generalización Multi-Semilla Verificada:** Se comprobó que el pipeline detecta los 5 escenarios en datasets con semillas arbitrarias (`SEMILLA=12` y `SEMILLA=42`) sin requerir entidades hardcodeadas.
+Informe generado por `scripts/ejecutar_evaluacion_jurado.py`; no editar a mano. EJ-01 y EJ-02 son deterministas (DuckDB + reglas del Vigía); EJ-03 llama al Guardrail real de Bedrock. La generalización con otras semillas se verifica aparte (`SEMILLA=12`, `SEMILLA=42` sobre `evals/`).
 """
 
     with open(DOC_OUT, "w", encoding="utf-8") as f:

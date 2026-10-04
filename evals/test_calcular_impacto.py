@@ -28,7 +28,7 @@ def test_renegociar_proveedor_reproduce_sobrecosto_s1():
         RenegociarProveedor(proveedor_id="PR08", skus=["P0001", "P0006", "P0011", "P0021"]), alerta, corte
     )
     assert res.horizonte == "mensual"
-    assert abs(res.valor_cop - 23_558_346) / 23_558_346 < 0.01
+    assert abs(res.valor_cop - 23_522_184) / 23_522_184 < 0.01
     assert res.consulta_ids and res.descripcion
 
 

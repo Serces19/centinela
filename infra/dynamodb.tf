@@ -84,29 +84,6 @@ resource "aws_dynamodb_table" "bitacora" {
   }
 }
 
-# 3. centinela_checkpoints (LangGraph checkpoints)
-resource "aws_dynamodb_table" "checkpoints" {
-  name         = "centinela_checkpoints"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "thread_id"
-  range_key    = "checkpoint_id"
-
-  attribute {
-    name = "thread_id"
-    type = "S"
-  }
-
-  attribute {
-    name = "checkpoint_id"
-    type = "S"
-  }
-
-  tags = {
-    Modulo = "agentes"
-    Tabla  = "checkpoints"
-  }
-}
-
 # 4. centinela_trazas (Trazas LLM y consultas con TTL de 30 días)
 resource "aws_dynamodb_table" "trazas" {
   name         = "centinela_trazas"
