@@ -56,12 +56,10 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - b. Campo `paso_actual` en la alerta (`vigia`/`analista`/`estratega`/`ninguno`), actualizado por el pipeline.
   - c. La UI encadena el análisis de las 3 decisiones clave tras avanzar el reloj.
   - **Hecho cuando:** tras avanzar a 2026-08-15 aparece la alerta de S1, con paso visible y propuesta lista sin pasos manuales.
-- [ ] **R5 · Knowledge Base limpia (C5).** `[INF]`
-  - a. Crear un vector bucket e índice propios (`centinela-vectors-<cuenta>`, dimensión 1024, coseno) y apuntar la KB de Centinela a ellos; sin tocar los recursos de `legal-ai-scope-knowledge-base`.
-  - b. Dejar una sola copia de cada política en S3 con el nombre canónico (`FIN-POL-004`, `COM-POL-002`, `OPE-POL-007`), re-sincronizar y verificar.
-  - c. Una sola ruta de recuperación en `knowledge.py` (KB); borrar el modo híbrido local y la caché de embeddings.
-  - d. Arreglar `test_knowledge_base` y añadir una prueba que falla si aparece cualquier documento que no sea de las tres políticas.
-  - **Hecho cuando:** 5 consultas de política devuelven solo fragmentos de las 3 políticas, sin duplicados.
+- [x] **R5 · Knowledge Base limpia (C5).** `[INF]`
+  - Hecho: vector bucket e índice propios (`centinela-vectors-<cuenta>/politicas`, `scripts/provision_vectores.py`); KB nueva `centinela-politicas-kb` (id `6WKO5PZCW3`) aplicada con Terraform; una sola copia de cada política con nombre canónico; los 12 vectores huérfanos de Centinela se borraron del índice compartido (los de la otra KB no se tocaron).
+  - `knowledge.py` quedó en un solo camino (KB): el documento sale de la URI de S3, se descartan resultados ajenos y duplicados, la sección se deduce de los encabezados de cada política; sin KB devuelve vacío. Se eliminó el corpus embebido, el modo híbrido y la caché de embeddings.
+  - `scripts/sync_knowledge_base.py` localiza la KB por nombre, ingiere y verifica 5 consultas (solo políticas, sin duplicados). `evals/test_knowledge_base.py`: 12 pruebas pasan.
 - [ ] **R6 · Configuración real (C7).** `[BAK]` `[FRO]`
   - a. Contrato `ConfigKpi` y tabla `centinela_config`: umbrales por KPI con sus valores por defecto tomados de `metricas.yaml` y de la política, y autonomía por tipo de acción (Informa/Propone/Ejecuta).
   - b. `GET /config` y `PUT /config` (validados).

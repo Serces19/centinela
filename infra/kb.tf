@@ -3,9 +3,9 @@
 # Utiliza Titan Embeddings V2 (1024 dim) y S3 Vectors para indexación de las 3 políticas normativas.
 
 variable "s3_vectors_index_arn" {
-  description = "ARN del índice de S3 Vectors para almacenamiento persistente sin costo base"
+  description = "ARN del índice de S3 Vectors PROPIO de Centinela (se crea con scripts/provision_vectores.py; no compartir con otras KB)"
   type        = string
-  default     = "arn:aws:s3vectors:us-east-1:295894327291:bucket/bedrock-knowledge-base-ysxniz/index/bedrock-knowledge-base-default-index"
+  default     = "arn:aws:s3vectors:us-east-1:295894327291:bucket/centinela-vectors-295894327291/index/politicas"
 }
 
 # 1. Bucket S3 para documentos de políticas normativas
@@ -124,6 +124,7 @@ resource "aws_iam_role_policy" "bedrock_kb_s3_vectors" {
           "s3vectors:QueryVectors",
           "s3vectors:PutVectors",
           "s3vectors:GetVectors",
+          "s3vectors:ListVectors",
           "s3vectors:DeleteVectors"
         ]
         Resource = var.s3_vectors_index_arn
@@ -171,7 +172,7 @@ resource "aws_cloudformation_stack" "bedrock_kb" {
       KnowledgeBase = {
         Type = "AWS::Bedrock::KnowledgeBase"
         Properties = {
-          Name        = "centinela-knowledge-base"
+          Name        = "centinela-politicas-kb"
           Description = "Base de conocimiento normativo para Distribuidora Andina SAS (FIN-POL-004, COM-POL-002, OPE-POL-007)"
           RoleArn     = { Ref = "RoleArn" }
           KnowledgeBaseConfiguration = {
@@ -207,7 +208,7 @@ resource "aws_cloudformation_stack" "bedrock_kb" {
               BucketArn = { Ref = "PoliticasBucket" }
             }
           }
-          DataDeletionPolicy = "RETAIN"
+          DataDeletionPolicy = "DELETE"
         }
       }
     }

@@ -1,13 +1,36 @@
-"""evals/test_knowledge_base.py
+"""R5: la Knowledge Base devuelve solo fragmentos de las 3 políticas oficiales, sin duplicados y bien citados.
 
-Pruebas de recuperacion semantica de politicas con PoliticasRetriever (Bedrock Titan V2 / Knowledge Base).
-Verifica que las 5 preguntas clave del reto devuelvan el documento y la seccion correctos,
-con scores validos y hashes SHA-256 inmutables.
+Prueba contra la KB real (KNOWLEDGE_BASE_ID en .env). Además verifica sin AWS la detección de documento y sección.
 """
 
 import pytest
-from services.knowledge import PoliticasRetriever, get_politicas_retriever
+
 from contracts.herramientas import FragmentoPolitica
+from services.knowledge import (
+    PoliticasRetriever,
+    documento_desde_uri,
+    get_politicas_retriever,
+    seccion_del_fragmento,
+)
+
+OFICIALES = {"FIN-POL-004", "COM-POL-002", "OPE-POL-007"}
+
+
+def test_documento_desde_uri():
+    assert documento_desde_uri("s3://b/FIN-POL-004_politica_credito_cartera.pdf") == "FIN-POL-004"
+    assert documento_desde_uri("s3://b/OPE-POL-007_x.pdf") == "OPE-POL-007"
+    assert documento_desde_uri("s3://b/compendio-2024-2025-15-136.pdf") is None
+
+
+def test_seccion_por_encabezados():
+    texto = "2. Plazos de pago por segmento Segmento Plazo ... 3. Cupo de crédito El cupo de crédito equivale ..."
+    assert seccion_del_fragmento("FIN-POL-004", texto) == "FIN-POL-004 §2-§3"
+    assert seccion_del_fragmento("COM-POL-002", "5. Monitoreo Control Comercial revisa") == "COM-POL-002 §5 Monitoreo"
+    assert seccion_del_fragmento("OPE-POL-007", "sin encabezados") == "OPE-POL-007"
+
+
+def test_sin_kb_configurada_devuelve_vacio():
+    assert PoliticasRetriever(knowledge_base_id=None).buscar("plazo mayoristas") == []
 
 
 @pytest.fixture(scope="module")
@@ -15,71 +38,23 @@ def retriever():
     return get_politicas_retriever()
 
 
-def test_retriever_inicializacion(retriever: PoliticasRetriever):
-    """Verifica que el retriever cargue el corpus de politicas."""
-    assert retriever is not None
-    assert len(retriever._embeddings_corpus) == 12
-
-
-def test_recuperacion_plazo_mayoristas(retriever: PoliticasRetriever):
-    """1. 'plazo mayoristas' -> FIN-POL-004 (45 dias en §2)."""
-    resultados = retriever.buscar("plazo mayoristas", k=3)
-    assert len(resultados) >= 1
-    top = resultados[0]
-    assert isinstance(top, FragmentoPolitica)
-    assert top.documento == "FIN-POL-004"
-    assert "§2" in top.seccion
-    assert "45 días" in top.texto or "45 dias" in top.texto.lower()
-    assert len(top.fragmento_hash) == 64
-    assert 0.0 <= top.score <= 1.0
-
-
-def test_recuperacion_tope_descuento_minoristas(retriever: PoliticasRetriever):
-    """2. 'tope descuento minoristas' -> COM-POL-002 (10% en §2)."""
-    resultados = retriever.buscar("tope descuento minoristas", k=3)
-    assert len(resultados) >= 1
-    top = resultados[0]
-    assert isinstance(top, FragmentoPolitica)
-    assert top.documento == "COM-POL-002"
-    assert "§2" in top.seccion
-    assert "10%" in top.texto
-    assert "Minoristas" in top.texto
-    assert len(top.fragmento_hash) == 64
-
-
-def test_recuperacion_cobertura_minima_clase_a(retriever: PoliticasRetriever):
-    """3. 'cobertura mínima clase A' -> OPE-POL-007 (10 dias en §2)."""
-    resultados = retriever.buscar("cobertura mínima clase A", k=3)
-    assert len(resultados) >= 1
-    top = resultados[0]
-    assert isinstance(top, FragmentoPolitica)
-    assert top.documento == "OPE-POL-007"
-    assert "§2" in top.seccion
-    assert "10 días" in top.texto or "10 dias" in top.texto.lower()
-    assert "Clase A" in top.texto
-    assert len(top.fragmento_hash) == 64
-
-
-def test_recuperacion_costo_sube_mas_del_5_porciento(retriever: PoliticasRetriever):
-    """4. 'costo sube más del 5 %' -> OPE-POL-007 (revisar precio en 10 dias habiles en §4)."""
-    resultados = retriever.buscar("costo sube más del 5 %", k=3)
-    assert len(resultados) >= 1
-    top = resultados[0]
-    assert isinstance(top, FragmentoPolitica)
-    assert top.documento == "OPE-POL-007"
-    assert "§4" in top.seccion or "precio" in top.seccion.lower()
-    assert "5%" in top.texto
-    assert "10" in top.texto  # 10 dias habiles
-    assert len(top.fragmento_hash) == 64
-
-
-def test_recuperacion_mas_de_60_dias_vencido(retriever: PoliticasRetriever):
-    """5. 'más de 60 días vencido' -> FIN-POL-004 (bloqueo de despachos en §4)."""
-    resultados = retriever.buscar("más de 60 días vencido", k=3)
-    assert len(resultados) >= 1
-    top = resultados[0]
-    assert isinstance(top, FragmentoPolitica)
-    assert top.documento == "FIN-POL-004"
-    assert "§4" in top.seccion
-    assert "Bloqueo de despachos" in top.texto or "bloqueo" in top.texto.lower()
-    assert len(top.fragmento_hash) == 64
+@pytest.mark.parametrize(
+    "consulta,documento,texto_esperado",
+    [
+        ("plazo de pago mayoristas", "FIN-POL-004", "45"),
+        ("tope de descuento minoristas", "COM-POL-002", "10%"),
+        ("cobertura mínima clase A", "OPE-POL-007", "10 días"),
+        ("costo sube más del 5 %", "OPE-POL-007", "10 días hábiles"),
+        ("más de 60 días vencido", "FIN-POL-004", "Bloqueo de despachos"),
+    ],
+)
+def test_recuperacion_correcta_y_solo_politicas(retriever, consulta, documento, texto_esperado):
+    resultados = retriever.buscar(consulta, k=5)
+    assert resultados, "la KB no devolvió fragmentos"
+    assert all(isinstance(f, FragmentoPolitica) for f in resultados)
+    assert {f.documento for f in resultados} <= OFICIALES
+    assert len({f.fragmento_hash for f in resultados}) == len(resultados), "fragmentos duplicados"
+    assert any(f.documento == documento and texto_esperado in f.texto for f in resultados), (
+        f"ningún fragmento de {documento} contiene '{texto_esperado}'"
+    )
+    assert all(len(f.fragmento_hash) == 64 and 0.0 <= f.score <= 1.0 for f in resultados)

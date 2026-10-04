@@ -1,100 +1,70 @@
-"""scripts/sync_knowledge_base.py
+"""Sincroniza las políticas de S3 con la Knowledge Base de Centinela y verifica la recuperación.
 
-Inicia y monitorea el trabajo de sincronización / ingestión de los documentos normativos PDF
-(FIN-POL-004, COM-POL-002, OPE-POL-007) desde el bucket S3 hacia Amazon Bedrock Knowledge Base
-con backend S3 Vectors.
+Busca la KB por nombre (`centinela-politicas-kb`), lanza el trabajo de ingestión, espera a que termine y
+comprueba con 5 consultas que SOLO se recuperan fragmentos de las tres políticas (FIN-POL-004, COM-POL-002,
+OPE-POL-007), sin duplicados ni documentos ajenos.
 """
 
+import re
 import sys
 import time
+
 import boto3
 
 REGION = "us-east-1"
-KB_ID = "OGWCO3WVFH"
-DATA_SOURCE_ID = "BHCVMHRB2F"
+KB_NOMBRE = "centinela-politicas-kb"
+CODIGOS = ("FIN-POL-004", "COM-POL-002", "OPE-POL-007")
+CONSULTAS = [
+    "plazo de pago mayoristas",
+    "tope de descuento minoristas",
+    "cobertura mínima clase A",
+    "costo sube más del 5 %",
+    "más de 60 días vencido",
+]
 
-def sync_kb():
-    print(f"=== Sincronización Bedrock Knowledge Base ({KB_ID}) ===")
-    client = boto3.client("bedrock-agent", region_name=REGION)
-    
-    # 1. Comprobar estado de la Knowledge Base y Data Source
-    try:
-        kb_desc = client.get_knowledge_base(knowledgeBaseId=KB_ID)
-        print(f"Knowledge Base: {kb_desc['knowledgeBase']['name']} | Estado: {kb_desc['knowledgeBase']['status']}")
-        
-        ds_desc = client.get_data_source(knowledgeBaseId=KB_ID, dataSourceId=DATA_SOURCE_ID)
-        print(f"Data Source: {ds_desc['dataSource']['name']} | Estado: {ds_desc['dataSource']['status']}")
-    except Exception as e:
-        print(f"Error consultando KB/DataSource: {e}")
-        sys.exit(1)
-        
-    # 2. Iniciar Ingestion Job
-    print("\nIniciando Ingestion Job en Bedrock...")
-    try:
-        job = client.start_ingestion_job(
-            knowledgeBaseId=KB_ID,
-            dataSourceId=DATA_SOURCE_ID,
-            description="Ingestión de políticas normativas Distribuidora Andina SAS",
-        )
-        job_id = job["ingestionJob"]["ingestionJobId"]
-        print(f"Ingestion Job iniciado con ID: {job_id}")
-    except Exception as e:
-        print(f"Error iniciando Ingestion Job: {e}")
-        # Listar si ya había uno corriendo
-        jobs = client.list_ingestion_jobs(knowledgeBaseId=KB_ID, dataSourceId=DATA_SOURCE_ID)
-        summaries = jobs.get("ingestionJobSummaries", [])
-        if summaries:
-            job_id = summaries[0]["ingestionJobId"]
-            print(f"Usando último trabajo existente: {job_id}")
-        else:
-            sys.exit(1)
 
-    # 3. Monitorear hasta que termine
-    print("Esperando a que la ingestión complete...")
-    for _ in range(60):
-        res = client.get_ingestion_job(
-            knowledgeBaseId=KB_ID,
-            dataSourceId=DATA_SOURCE_ID,
-            ingestionJobId=job_id,
-        )
-        status = res["ingestionJob"]["status"]
-        stats = res["ingestionJob"].get("statistics", {})
-        print(f"  Estado: {status} | Documentos escaneados: {stats.get('numberOfDocumentsScanned', 0)} | Indexados: {stats.get('numberOfNewDocumentsIndexed', 0)}")
-        if status in ("COMPLETE", "FAILED", "STOPPED"):
+def buscar_kb(agente) -> tuple[str, str]:
+    for kb in agente.list_knowledge_bases()["knowledgeBaseSummaries"]:
+        if kb["name"] == KB_NOMBRE:
+            ds = agente.list_data_sources(knowledgeBaseId=kb["knowledgeBaseId"])["dataSourceSummaries"][0]
+            return kb["knowledgeBaseId"], ds["dataSourceId"]
+    sys.exit(f"No existe la Knowledge Base '{KB_NOMBRE}'. Ejecutar terraform apply.")
+
+
+def main() -> int:
+    agente = boto3.client("bedrock-agent", region_name=REGION)
+    runtime = boto3.client("bedrock-agent-runtime", region_name=REGION)
+    kb_id, ds_id = buscar_kb(agente)
+    print(f"KB {KB_NOMBRE}: {kb_id} · data source {ds_id}")
+
+    job = agente.start_ingestion_job(knowledgeBaseId=kb_id, dataSourceId=ds_id)["ingestionJob"]["ingestionJobId"]
+    for _ in range(90):
+        estado = agente.get_ingestion_job(knowledgeBaseId=kb_id, dataSourceId=ds_id, ingestionJobId=job)["ingestionJob"]
+        print(f"  ingestión: {estado['status']} · {estado.get('statistics', {})}")
+        if estado["status"] in ("COMPLETE", "FAILED", "STOPPED"):
             break
         time.sleep(5)
+    if estado["status"] != "COMPLETE":
+        print("La ingestión no terminó bien:", estado.get("failureReasons"))
+        return 1
 
-    if status != "COMPLETE":
-        print(f"Advertencia: El job terminó con estado {status}")
-        reasons = res["ingestionJob"].get("failureReasons", [])
-        if reasons:
-            print("Razones de falla:", reasons)
-    else:
-        print("\n ¡Ingestión completada con éxito en Bedrock S3 Vectors!")
+    errores = 0
+    for consulta in CONSULTAS:
+        res = runtime.retrieve(
+            knowledgeBaseId=kb_id,
+            retrievalQuery={"text": consulta},
+            retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 5}},
+        )["retrievalResults"]
+        uris = [r["location"]["s3Location"]["uri"].rsplit("/", 1)[-1] for r in res]
+        ajenos = [u for u in uris if not any(c in u for c in CODIGOS)]
+        textos = [r["content"]["text"] for r in res]
+        duplicados = len(textos) - len(set(textos))
+        top = re.sub(r"\s+", " ", textos[0])[:70] if textos else "-"
+        print(f"- {consulta!r}: {len(res)} fragmentos · ajenos={ajenos} · duplicados={duplicados} · top: {top}")
+        errores += bool(ajenos) + bool(duplicados) + (not res)
+    print("OK: solo políticas de Centinela, sin duplicados" if not errores else f"FALLÓ: {errores} problema(s)")
+    return 1 if errores else 0
 
-    # 4. Probar búsqueda en Bedrock Agent Runtime
-    print("\nProbando búsqueda semántica con bedrock-agent-runtime.retrieve()...")
-    runtime = boto3.client("bedrock-agent-runtime", region_name=REGION)
-    query = "Cuál es el plazo de pago para clientes mayoristas según la política?"
-    try:
-        retrieval = runtime.retrieve(
-            knowledgeBaseId=KB_ID,
-            retrievalQuery={"text": query},
-            retrievalConfiguration={
-                "vectorSearchConfiguration": {
-                    "numberOfResults": 2,
-                }
-            },
-        )
-        results = retrieval.get("retrievalResults", [])
-        print(f"Resultados obtenidos: {len(results)}")
-        for i, r in enumerate(results, 1):
-            score = r.get("score", "N/A")
-            text = r.get("content", {}).get("text", "")[:200]
-            print(f"  [{i}] Score: {score}")
-            print(f"      Texto: {text}...")
-    except Exception as e:
-        print(f"Error en retrieve: {e}")
 
 if __name__ == "__main__":
-    sync_kb()
+    sys.exit(main())

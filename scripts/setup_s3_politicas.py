@@ -12,19 +12,11 @@ from botocore.exceptions import ClientError
 REGION = "us-east-1"
 BUCKET_NAME = "centinela-politicas-295894327291"
 
+# Una sola copia por política, con el código de la política en el nombre (la KB deduce el documento de la URI).
 POLITICAS_MAP = {
-    "Politica_Credito_y_Cartera.pdf": [
-        "FIN-POL-004_politica_credito_cartera.pdf",
-        "Politica_Credito_y_Cartera.pdf",
-    ],
-    "Politica_Descuentos_Comerciales.pdf": [
-        "COM-POL-002_politica_descuentos.pdf",
-        "Politica_Descuentos_Comerciales.pdf",
-    ],
-    "Politica_Inventario_y_Precios.pdf": [
-        "OPE-POL-007_politica_inventarios_precios.pdf",
-        "Politica_Inventario_y_Precios.pdf",
-    ],
+    "Politica_Credito_y_Cartera.pdf": ["FIN-POL-004_politica_credito_cartera.pdf"],
+    "Politica_Descuentos_Comerciales.pdf": ["COM-POL-002_politica_descuentos.pdf"],
+    "Politica_Inventario_y_Precios.pdf": ["OPE-POL-007_politica_inventarios_precios.pdf"],
 }
 
 
