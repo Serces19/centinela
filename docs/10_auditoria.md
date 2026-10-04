@@ -57,7 +57,7 @@ Leyenda: ✅ cumple · ⚠️ cumple a medias · ❌ no cumple.
 ### 1.5 IA responsable (lámina 19)
 | Riesgo | Estado | Evidencia |
 |---|---|---|
-| Cifras inventadas | ⚠️ | El validador `numeros_sueltos` se **evade escribiendo los números con letras** ("veinticinco por ciento"); el Analista de S1 afirma que los márgenes "alcanzan el veinticinco por ciento" cuando Hogar está en 22,3 % (C7). En el chat, `consulta_id="Q-ALERTA-DIRECTA"` no cumple el patrón del contrato. |
+| Cifras inventadas | ⚠️ | El validador `numeros_sueltos` se **evade escribiendo los números con letras** ("veinticinco por ciento"); el Analista de S1 afirma que los márgenes de los cuatro SKU "alcanzan el veinticinco por ciento"; con el costo nuevo y el precio de lista vigente quedan entre 5,8 % y 22,4 % (C7). En el chat, `consulta_id="Q-ALERTA-DIRECTA"` no cumple el patrón del contrato. |
 | Acción no deseada | ✅ | Aprobación + sandbox. |
 | Inyección de instrucciones | ✅ | EJ-03 pasa con el guardrail. |
 | **Acceso indebido a datos** | ❌ | **La API no tiene autenticación** (C2). "Roles por área" es solo un selector de persona en la UI; `decidido_por` lo envía el cliente. |
@@ -82,7 +82,7 @@ Leyenda: ✅ cumple · ⚠️ cumple a medias · ❌ no cumple.
 
 **C6 · "Centinela aprende" no aprende.** El motivo de rechazo se escribe en `centinela_config`; ningún agente lo consulta. Es un requisito explícito del recorrido del usuario.
 
-**C7 · Calidad del diagnóstico de S1.** Con los datos reales, el Analista dice que el costo subió "más del cinco por ciento" (fue 25 %) y que los márgenes "alcanzan el veinticinco por ciento" (Hogar cayó a 22,3 %). La acción propuesta es subir el precio 5,5 %, que no repone un alza de costo de 25 %. Y el impacto de $23,5 M es el sobrecosto mensual, no lo "recuperable" con esa acción. El jurado leerá este texto en el minuto 2 de la demo.
+**C7 · Calidad del diagnóstico de S1.** Con los datos reales (lista de precios vigente y costo desde el 2026-08-15), el margen de los SKU queda en: P0001 12,9 %, P0006 5,8 %, P0011 10,8 % y P0021 22,4 %. El Analista dice que "alcanzan el veinticinco por ciento" y solo habla de un alza "de más del cinco por ciento" (fue 25 %; la regla de números sueltos le impide citar la cifra en el texto). La acción propuesta es subir el precio 5,5 %: para P0001 reponer el 25 % exigiría cerca de +16 %. Y el impacto de $23,5 M es el sobrecosto mensual, no lo "recuperable" con esa acción. El jurado leerá este texto en el minuto 2 de la demo.
 
 **C8 · Cifras de los documentos de demo y pitch que no se sostienen.**
 - Backtest: S2 y S5 aparecen "detectados el 2025-10-14 y el 2025-10-13 (+351 y +352 días)", cuando esos escenarios empiezan meses después (S2 en abril, S5 en julio). Son alertas por pagos normales, no los escenarios. Con esos datos el promedio de anticipación no es "+18 a +25 días"; el titular es inconsistente con su propia tabla.
