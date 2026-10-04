@@ -90,7 +90,7 @@ Origen: [docs/05_auditoria.md](docs/05_auditoria.md). Reglas de ejecución: una 
   - d. Consolidar la documentación (de 11 a 4 archivos) y mover los informes generados a `docs/informes/`.
   - e. Reescribir el guion de demo y el pitch con las cifras medidas.
   - **Hecho cuando:** cada número del pitch tiene una consulta o una traza que lo respalda.
-- [ ] **R12 · Limpieza del repositorio.** `[INF]` Mover o borrar scripts que no se usan, sacar `temp_seed_*` del árbol de trabajo, actualizar `README.md`.
+- [x] **R12 · Limpieza del repositorio** (scripts obsoletos eliminados, `temp_seed_*` ignorados por git, README actualizado). `[INF]` Mover o borrar scripts que no se usan, sacar `temp_seed_*` del árbol de trabajo, actualizar `README.md`.
 - [ ] **R13 · Despliegue y verificación final.** `[INF]`
   - a. Reconstruir imagen, `terraform apply`, desplegar frontend.
   - b. Ejecutar toda la suite, la evaluación del jurado y `SEMILLA=12` y `42`.
