@@ -31,7 +31,7 @@ from contracts.bitacora import EntradaBitacora, verificar_cadena
 from contracts.configuracion import CORTE_INICIAL_LIMPIO, FECHA_CORTE_DEFECTO
 from contracts.decision import DecisionRequest, ResultadoEjecucion
 from contracts.operacion import ChatRequest, ChatToken, ErrorAPI, SimulacionResp
-from agents.graph import aplicar_decision_humana, procesar_alerta_completa
+from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
 from services.auth import RUTAS_PUBLICAS, auth_deshabilitada, clave_valida
 from services.chat import generar_respuesta_chat_stream

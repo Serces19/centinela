@@ -24,7 +24,7 @@ from datetime import date
 import pytest
 
 from agents.estratega import generar_propuesta
-from agents.graph import aplicar_decision_humana
+from agents.pipeline import aplicar_decision_humana
 from agents.vigia import generar_alertas
 from contracts.agentes import (
     AjustePrecio,

@@ -39,7 +39,7 @@ from rich import box
 
 from agents.analista import analizar_alerta
 from agents.estratega import generar_propuesta
-from agents.graph import aplicar_decision_humana, procesar_alerta_completa
+from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
 from contracts.agentes import AjustePrecio, ContactoCartera, DiagnosticoLLM, Propuesta
 from contracts.alertas import Alerta

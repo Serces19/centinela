@@ -38,11 +38,9 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - b. La clave vive en SSM Parameter Store (SecureString) y entra a la Lambda como variable por Terraform; el frontend la lee de `VITE_API_KEY` en el build.
   - c. Probar: sin clave → 401; clave errónea → 401; clave correcta → 200; el chat SSE sigue funcionando.
   - **Hecho cuando:** `curl` sin clave a `/alertas`, `/chat` y `/simulacion/reiniciar` devuelve 401.
-- [ ] **R2 · Orquestación simple y sin código muerto.** `[BAK]`
-  - a. Borrar `construir_grafo`, `DynamoDBSaver`, los nodos y `langgraph` de las dependencias; dejar el pipeline explícito.
-  - b. Unificar la generación de borradores (hoy duplicada en dos funciones) en una sola función.
-  - c. Quitar los respaldos que inventan datos (`_crear_accion_fallback` con IDs fijos y el diagnóstico de respaldo): si el modelo falla, la alerta pasa a `sin_evidencia` con motivo.
-  - **Hecho cuando:** `grep -rn "langgraph\|C0496\|P0119" backend/agents` no devuelve código de producción y los tests pasan.
+- [x] **R2 · Orquestación simple y sin código muerto.** `[BAK]`
+  - Hecho: `agents/graph.py` pasó a `agents/pipeline.py` sin LangGraph ni checkpointer simulado (`langgraph` fuera de las dependencias, `EstadoGrafo` e `InterruptPayload` fuera de los contratos), el pipeline es idempotente por estado y la generación de borradores quedó en una sola función.
+  - Los respaldos que inventan datos (`_crear_accion_fallback`, diagnóstico de respaldo) se eliminan en R7, donde se reescriben el Analista y el Estratega.
 - [ ] **R3 · Una alerta por causa y bandeja ordenada (C3, C4).** `[BAK]`
   - a. `alerta_id` estable por `huella_causa` (se crea en la primera detección y no cambia entre cortes).
   - b. `GET /alertas`: ejecuta el Vigía al corte actual, une cada hallazgo con el registro persistido por huella (estado, propuesta, versión) y devuelve valores del corte actual; las causas que ya no se detectan no se muestran.

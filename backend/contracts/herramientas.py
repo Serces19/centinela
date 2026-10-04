@@ -4,10 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .agentes import DiagnosticoLLM, Propuesta
-from .alertas import Hallazgo
 from .base import AccionId, AlertaId, Contrato, Hash256, Vista
-from .decision import DecisionRequest, ResultadoEjecucion
 from .evidencia import ConsultaRegistrada
 
 
@@ -66,22 +63,6 @@ class CalcularImpactoIn(Contrato):
 class CrearBorradorIn(Contrato):
     alerta_id: AlertaId
     accion_id: AccionId                          # el Ejecutor solo acepta acciones en estado `aprobada`
-
-
-class EstadoGrafo(Contrato):
-    run_id: str
-    corte: date
-    alerta_id: AlertaId | None = None
-    hallazgos: list[Hallazgo] = Field(default_factory=list)
-    diagnostico: DiagnosticoLLM | None = None
-    propuesta: Propuesta | None = None
-    decision: DecisionRequest | None = None
-    resultado: ResultadoEjecucion | None = None
-
-
-class InterruptPayload(Contrato):
-    alerta_id: AlertaId
-    propuesta: Propuesta
 
 
 class PipelineEvent(Contrato):

@@ -15,11 +15,7 @@ from fastapi.testclient import TestClient
 
 from agents.analista import analizar_alerta
 from agents.estratega import _filtrar_acciones_coherentes, generar_propuesta
-from agents.graph import (
-    aplicar_decision_humana,
-    construir_grafo,
-    procesar_alerta_completa,
-)
+from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
 from api.main import app
 from contracts.agentes import (
@@ -34,9 +30,6 @@ from contracts.base import AlertaId, EstadoAlerta
 from contracts.bitacora import verificar_cadena
 from contracts.decision import DecisionRequest
 from contracts.evidencia import CifraTrazable, CitaPolitica, numeros_sueltos
-from contracts.herramientas import EstadoGrafo, InterruptPayload
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Command
 from services.persistencia import persistencia_service
 
 
@@ -168,103 +161,6 @@ def test_coherencia_estratega_descarte_inventados(alerta_s1: Alerta):
         if isinstance(a.parametros, AjustePrecio):
             assert "P9999" not in a.parametros.skus
             assert any(s in ("P0005", "P0006", "P0007", "P0008") for s in a.parametros.skus)
-
-
-# =============================================================================
-# Fase 2D: Orquestador LangGraph y Human-in-the-Loop
-# =============================================================================
-@pytest.mark.asyncio
-async def test_langgraph_hitl_suspension_y_reanudacion(alerta_s1: Alerta):
-    """Prueba el ciclo completo de LangGraph con MemorySaver:
-
-    1. Arranca en corte 2026-08-15 con alerta_s1.
-    2. Vigía genera S1.
-    3. Analista y Estratega generan propuesta.
-    4. Grafo se suspende en nodo_aprobacion_humana (interrupt).
-    5. Reanuda con Command(resume=decision_request).
-    6. Ejecutor genera borradores sandbox y sella bitácora completa.
-    """
-    saver = MemorySaver()
-    app_grafo = construir_grafo(checkpointer=saver)
-
-    corte_test = date(2026, 8, 15)
-    thread_id = f"test-thread-{uuid.uuid4().hex[:6]}"
-    config = {"configurable": {"thread_id": thread_id}}
-
-    diagnostico = DiagnosticoLLM(
-        resumen="Incremento de costo en proveedor PR08 afecta cuatro productos de la linea Hogar",
-        causa_raiz="El proveedor PR08 incremento costos unitarios por encima del umbral de politica OPE-POL-007",
-        cifras=[
-            CifraTrazable(etiqueta="Incremento de costo", valor=20.0, unidad="%", consulta_id="Q-0123456789ab"),
-            CifraTrazable(etiqueta="Dinero en riesgo mensual", valor=23558346.0, unidad="COP", consulta_id="Q-0123456789ab"),
-        ],
-        politicas=[
-            CitaPolitica(
-                documento="OPE-POL-007",
-                seccion="§4 Notificación de cambios de costo",
-                fragmento_hash="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            )
-        ],
-        supuestos=["Demanda se mantendrá constante"],
-        evidencia_suficiente=True,
-        confianza=0.9,
-    )
-
-    estado_inicial = EstadoGrafo(
-        run_id=f"run-{uuid.uuid4().hex[:6]}",
-        corte=corte_test,
-        alerta_id=alerta_s1.alerta_id,
-        diagnostico=diagnostico,
-    )
-
-    # 1. Primera invocación: debe avanzar hasta la interrupción humana
-    res_1 = await app_grafo.ainvoke(estado_inicial, config=config)
-
-    # Verificar que el grafo se interrumpió en el nodo de aprobación humana
-    graph_state = app_grafo.get_state(config)
-    assert graph_state.next == ("aprobacion_humana",)
-    assert len(graph_state.tasks) >= 1
-    assert len(graph_state.tasks[0].interrupts) >= 1
-
-    payload_raw = graph_state.tasks[0].interrupts[0].value
-    assert isinstance(payload_raw, InterruptPayload)
-    alerta_id = payload_raw.alerta_id
-    propuesta = payload_raw.propuesta
-    assert alerta_id is not None
-    assert propuesta is not None
-
-    # Verificar estado de alerta en persistencia: debe estar en 'propuesta'
-    alerta_guardada = persistencia_service.obtener_alerta(alerta_id)
-    assert alerta_guardada is not None
-    assert alerta_guardada.estado == EstadoAlerta.PROPUESTA
-
-    # 2. Reanudación con decisión humana de aprobación
-    accion_ids = [a.accion_id for a in propuesta.acciones]
-    decision_req = DecisionRequest(
-        decision="aprobar",
-        accion_ids=accion_ids,
-        decidido_por="usuario:sergio.arquitecto",
-    )
-
-    res_2 = await app_grafo.ainvoke(Command(resume=decision_req), config=config)
-
-    # Verificar que completó el nodo ejecutor
-    resultado_ejecucion = res_2.get("resultado")
-    assert resultado_ejecucion is not None
-    assert resultado_ejecucion.ok is True
-    assert len(resultado_ejecucion.borradores) == len(accion_ids)
-    for b in resultado_ejecucion.borradores:
-        assert b.destino.startswith("sandbox://")
-        assert b.estado == "borrador"
-
-    # Verificar estado final de alerta: 'ejecutada'
-    alerta_final = persistencia_service.obtener_alerta(alerta_id)
-    assert alerta_final.estado == EstadoAlerta.EJECUTADA
-
-    # Verificar integridad de la bitácora
-    bitacora = persistencia_service.obtener_bitacora(alerta_id)
-    assert len(bitacora) >= 4  # ALERTA_CREADA, ANALISIS_COMPLETO, PROPUESTA_GENERADA, DECISION_HUMANA, ACCION_EJECUTADA
-    assert verificar_cadena(bitacora) is True
 
 
 # =============================================================================

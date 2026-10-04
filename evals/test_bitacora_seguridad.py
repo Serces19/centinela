@@ -16,7 +16,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from agents.graph import aplicar_decision_humana
+from agents.pipeline import aplicar_decision_humana
 from agents.vigia import generar_alertas
 from api.main import app
 from contracts.agentes import Accion, AjustePrecio, DiagnosticoLLM, ImpactoCalculado, Propuesta

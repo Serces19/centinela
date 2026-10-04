@@ -34,7 +34,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from agents.graph import aplicar_decision_humana, procesar_alerta_completa
+from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
 from contracts.base import EstadoAlerta
 from contracts.bitacora import verificar_cadena

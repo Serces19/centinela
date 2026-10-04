@@ -52,10 +52,8 @@ from .herramientas import (
     ConsultarVistaIn,
     ConsultarVistaOut,
     CrearBorradorIn,
-    EstadoGrafo,
     Filtro,
     FragmentoPolitica,
-    InterruptPayload,
     PipelineEvent,
 )
 from .operacion import (
@@ -147,8 +145,6 @@ __all__ = [
     "BuscarPoliticaOut",
     "CalcularImpactoIn",
     "CrearBorradorIn",
-    "EstadoGrafo",
-    "InterruptPayload",
     "PipelineEvent",
     # Configuracion
     "ConfigKpi",
