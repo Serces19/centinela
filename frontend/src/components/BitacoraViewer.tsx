@@ -1,336 +1,138 @@
 // frontend/src/components/BitacoraViewer.tsx
-import React, { useState, useEffect } from 'react';
-import {
-  ShieldCheck,
-  ShieldAlert,
-  Hash,
-  Copy,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  RefreshCw,
-  Search,
-  Filter,
-  Lock,
-  Layers,
-  Sparkles,
-  User,
-  Cpu,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Loader2, ShieldAlert, ShieldCheck, X } from 'lucide-react';
 import { AlertaVista, BitacoraResponse, EntradaBitacora } from '../types';
 import { getBitacora } from '../api/client';
+import { tituloAlerta } from '../utils/alertas';
 import { formatFecha, formatHora } from '../utils/formatters';
 
 interface Props {
   alertas: AlertaVista[];
   alertaSeleccionadaId?: string;
+  onLimpiarAlerta: () => void;
 }
 
-export const BitacoraViewer: React.FC<Props> = ({
-  alertas,
-  alertaSeleccionadaId,
-}) => {
-  const [alertaActivaId, setAlertaActivaId] = useState<string>(
-    alertaSeleccionadaId || alertas[0]?.alerta.alerta_id || ''
-  );
-  const [bitacora, setBitacora] = useState<BitacoraResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [verificando, setVerificando] = useState(false);
-  const [filaExpandida, setFilaExpandida] = useState<number | null>(null);
-  const [copiadoHash, setCopiadoHash] = useState<string | null>(null);
+const EVENTOS: Record<string, string> = {
+  alerta_creada: 'Alerta detectada',
+  analisis_completo: 'Análisis completo',
+  propuesta_generada: 'Propuesta generada',
+  decision_humana: 'Decisión humana',
+  accion_ejecutada: 'Acción ejecutada (borrador)',
+  alerta_reabierta: 'Alerta reabierta',
+  guardrail_intervino: 'Guardrail intervino',
+  error: 'Error',
+};
 
-  useEffect(() => {
-    if (alertaSeleccionadaId) {
-      setAlertaActivaId(alertaSeleccionadaId);
-    }
-  }, [alertaSeleccionadaId]);
+const ACTORES = ['vigia', 'analista', 'estratega', 'ejecutor'];
 
-  useEffect(() => {
-    if (alertaActivaId) {
-      cargarBitacora(alertaActivaId);
-    }
-  }, [alertaActivaId]);
+function detalle(e: EntradaBitacora): string {
+  const p = e.payload as Record<string, unknown>;
+  if (e.evento === 'decision_humana') return `${String(p.decision)}${p.motivo ? ` — «${String(p.motivo)}»` : ''}`;
+  if (e.evento === 'accion_ejecutada') return `${String(p.borradores_creados ?? p.borradores_generados ?? 0)} borrador(es) en sandbox`;
+  if (e.evento === 'propuesta_generada') return `${String(p.num_acciones)} acción(es) propuestas`;
+  if (e.evento === 'analisis_completo') return String(p.resumen ?? '').slice(0, 140);
+  if (e.evento === 'alerta_creada') return String(p.huella_causa ?? '');
+  return '';
+}
 
-  const cargarBitacora = async (id: string, verificar = true) => {
+export const BitacoraViewer: React.FC<Props> = ({ alertas, alertaSeleccionadaId, onLimpiarAlerta }) => {
+  const [datos, setDatos] = useState<BitacoraResponse | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actor, setActor] = useState('');
+  const [evento, setEvento] = useState('');
+
+  const cargar = useCallback(async () => {
     try {
-      setLoading(true);
-      const data = await getBitacora(id, verificar);
-      setBitacora(data);
-    } catch (err) {
-      console.error('Error cargando bitácora:', err);
+      setCargando(true);
+      setError(null);
+      setDatos(await getBitacora({ alertaId: alertaSeleccionadaId, actor: actor || undefined, evento: evento || undefined, limite: 200 }));
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
-      setLoading(false);
+      setCargando(false);
     }
-  };
+  }, [alertaSeleccionadaId, actor, evento]);
 
-  const handleVerificarCadena = async () => {
-    if (!alertaActivaId) return;
-    try {
-      setVerificando(true);
-      const data = await getBitacora(alertaActivaId, true);
-      setBitacora(data);
-    } finally {
-      setVerificando(false);
-    }
-  };
+  useEffect(() => { cargar(); }, [cargar]);
 
-  const handleCopiar = (texto: string) => {
-    navigator.clipboard.writeText(texto);
-    setCopiadoHash(texto);
-    setTimeout(() => setCopiadoHash(null), 2000);
+  const titulo = (id: string) => {
+    const a = alertas.find((x) => x.alerta.alerta_id === id);
+    return a ? tituloAlerta(a) : id;
   };
-
-  const getActorBadge = (actor: string) => {
-    if (actor.startsWith('usuario:')) {
-      return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-          <User className="w-3 h-3 text-emerald-600" />
-          {actor.replace('usuario:', '')}
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-        <Cpu className="w-3 h-3 text-slate-500" />
-        {actor}
-      </span>
-    );
-  };
-
-  const getEventoBadge = (evento: string) => {
-    switch (evento) {
-      case 'alerta_creada':
-        return (
-          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-            Alerta Creada
-          </span>
-        );
-      case 'analisis_completo':
-        return (
-          <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-            Análisis Completo
-          </span>
-        );
-      case 'propuesta_generada':
-        return (
-          <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-            Propuesta Generada
-          </span>
-        );
-      case 'decision_humana':
-        return (
-          <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-            Decisión Humana
-          </span>
-        );
-      case 'accion_ejecutada':
-        return (
-          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-            Acción Ejecutada
-          </span>
-        );
-      case 'guardrail_intervino':
-        return (
-          <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-            Guardrail Intervino
-          </span>
-        );
-      default:
-        return (
-          <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-            {evento}
-          </span>
-        );
-    }
-  };
+  const entradas = (datos?.entradas ?? []).filter((e) => (!alertaSeleccionadaId || true) && (!actor || e.actor.includes(actor)));
+  const esGeneral = !alertaSeleccionadaId;
 
   return (
-    <div className="space-y-6">
-      {/* Header y Selector de Alerta */}
-      <section className="glass rounded-4xl p-6  flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <section className="glass rounded-4xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Auditoría Criptográfica Inmutable
-            </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-              SHA-256 Linked List
-            </span>
-          </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
-            Cadena de Bitácora Operacional
-          </h2>
-          <p className="text-xs text-slate-500 max-w-xl mt-0.5">
-            Registro secuencial sellado criptográficamente. Cada transición de agente y decisión humana incorpora el hash del bloque previo, imposibilitando la alteración retroactiva.
-          </p>
+          <span className="section-eyebrow">{esGeneral ? 'Auditoría general' : 'Auditoría de una alerta'}</span>
+          <h2 className="text-lg font-semibold text-slate-900">{esGeneral ? 'Quién hizo qué y cuándo' : titulo(alertaSeleccionadaId!)}</h2>
+          <p className="text-xs text-slate-500">Cada evento queda sellado con SHA-256 encadenado: si alguien altera una entrada, la cadena deja de verificar.</p>
         </div>
-
-        {/* Selector y botón de verificar */}
-        <div className="flex items-center gap-3">
-          <select
-            value={alertaActivaId}
-            onChange={(e) => setAlertaActivaId(e.target.value)}
-            className="text-xs py-2 px-3 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-          >
-            {alertas.map((a) => (
-              <option key={a.alerta.alerta_id} value={a.alerta.alerta_id}>
-                {a.alerta.alerta_id} · {a.alerta.severidad.toUpperCase()} ({a.alerta.estado})
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={handleVerificarCadena}
-            disabled={verificando || loading || !alertaActivaId}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>{verificando ? 'Verificando...' : 'Verificar Cadena'}</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {!esGeneral && (
+            <>
+              <span className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${datos?.cadena_valida ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
+                {datos?.cadena_valida ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                {datos?.cadena_valida ? 'Cadena verificada' : 'Cadena alterada'}
+              </span>
+              <button onClick={onLimpiarAlerta} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/80 border border-white hover:bg-white flex items-center gap-1 cursor-pointer"><X className="w-3 h-3" /> Ver todo</button>
+            </>
+          )}
+          {esGeneral && (
+            <>
+              <select value={actor} onChange={(e) => setActor(e.target.value)} aria-label="Filtrar por actor" className="text-xs p-2 rounded-full bg-white/70 border border-white">
+                <option value="">Todos los actores</option>
+                {ACTORES.map((a) => <option key={a} value={a}>{a}</option>)}
+                <option value="usuario:">usuarios</option>
+              </select>
+              <select value={evento} onChange={(e) => setEvento(e.target.value)} aria-label="Filtrar por evento" className="text-xs p-2 rounded-full bg-white/70 border border-white">
+                <option value="">Todos los eventos</option>
+                {Object.entries(EVENTOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </>
+          )}
         </div>
       </section>
 
-      {/* Sello de Integridad de la Cadena */}
-      {bitacora && (
-        <div
-          className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
-            bitacora.cadena_valida
-              ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-950'
-              : 'bg-rose-50 border-rose-200 text-rose-950'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            {bitacora.cadena_valida ? (
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-            )}
-            <div>
-              <h4 className="text-sm font-bold">
-                {bitacora.cadena_valida
-                  ? 'Cadena Criptográfica Íntegra y Verificada'
-                  : 'ALERTA: Manipulación o Incoherencia Detectada en la Cadena'}
-              </h4>
-              <p className="text-xs opacity-80">
-                {bitacora.cadena_valida
-                  ? `Se verificaron matemáticamente ${bitacora.total_entradas} bloques enlazados sin saltos ni alteraciones.`
-                  : 'Los hashes calculados no coinciden con los registrados en la cadena.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right text-xs font-mono">
-            <span className="font-bold">{bitacora.total_entradas}</span> eventos auditados
-          </div>
-        </div>
-      )}
-
-      {/* Tabla de Bitácora */}
-      <div className="glass rounded-4xl  overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">
-            Cargando entradas de bitácora...
-          </div>
-        ) : !bitacora || bitacora.entradas.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400">
-            No hay entradas de bitácora registradas para esta alerta.
-          </div>
+      <section className="glass rounded-4xl p-5">
+        {cargando ? (
+          <div className="py-8 text-center text-sm text-slate-500 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</div>
+        ) : error ? (
+          <div role="alert" className="py-6 text-center text-sm text-rose-700">{error}</div>
+        ) : entradas.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">Todavía no hay eventos. Avanza el reloj simulado para que el Vigía detecte alertas.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/70 border-b border-slate-200/70 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3 px-4 w-12 text-center">Seq</th>
-                  <th className="py-3 px-4">Evento</th>
-                  <th className="py-3 px-4">Actor</th>
-                  <th className="py-3 px-4">Fecha y Hora</th>
-                  <th className="py-3 px-4">Hash SHA-256</th>
-                  <th className="py-3 px-4 text-center">Detalle</th>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-400 uppercase tracking-wider text-[10px]">
+                  <th className="py-2 pr-3 font-semibold">Cuándo</th>
+                  <th className="py-2 pr-3 font-semibold">Evento</th>
+                  <th className="py-2 pr-3 font-semibold">Quién</th>
+                  {esGeneral && <th className="py-2 pr-3 font-semibold">Alerta</th>}
+                  <th className="py-2 pr-3 font-semibold">Detalle</th>
+                  <th className="py-2 font-semibold">Sello</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {bitacora.entradas.map((entrada) => {
-                  const isExpanded = filaExpandida === entrada.seq;
-                  return (
-                    <React.Fragment key={entrada.seq}>
-                      <tr className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-4 text-center font-bold text-slate-700">
-                          #{entrada.seq}
-                        </td>
-                        <td className="py-3 px-4">
-                          {getEventoBadge(entrada.evento)}
-                        </td>
-                        <td className="py-3 px-4">
-                          {getActorBadge(entrada.actor)}
-                        </td>
-                        <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
-                          {formatFecha(entrada.ts)} {formatHora(entrada.ts)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <button
-                            onClick={() => handleCopiar(entrada.hash)}
-                            className="flex items-center gap-1 font-mono text-[11px] text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                            title="Copiar hash SHA-256 completo"
-                          >
-                            <span>
-                              {entrada.hash.substring(0, 10)}...{entrada.hash.substring(58)}
-                            </span>
-                            {copiadoHash === entrada.hash ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3 text-slate-400" />
-                            )}
-                          </button>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() =>
-                              setFilaExpandida(isExpanded ? null : entrada.seq)
-                            }
-                            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-
-                      {/* Fila expandida con Payload */}
-                      {isExpanded && (
-                        <tr className="bg-slate-50/90">
-                          <td colSpan={6} className="p-4">
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                                <span>
-                                  Hash Previo (hash_prev):{' '}
-                                  <strong className="text-slate-700">
-                                    {entrada.hash_prev}
-                                  </strong>
-                                </span>
-                                <span>Schema v{entrada.schema_version}</span>
-                              </div>
-                              <pre className="p-3 bg-slate-900 text-slate-200 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
-                                {JSON.stringify(entrada.payload, null, 2)}
-                              </pre>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
+              <tbody className="divide-y divide-white/70">
+                {entradas.map((e) => (
+                  <tr key={`${e.alerta_id}-${e.seq}`} className="align-top">
+                    <td className="py-2.5 pr-3 whitespace-nowrap text-slate-500">{formatFecha(e.ts)} {formatHora(e.ts)}</td>
+                    <td className="py-2.5 pr-3 font-semibold text-slate-800 whitespace-nowrap">{EVENTOS[e.evento] ?? e.evento}</td>
+                    <td className="py-2.5 pr-3 text-slate-600 whitespace-nowrap">{e.actor}</td>
+                    {esGeneral && <td className="py-2.5 pr-3 text-slate-600 max-w-[16rem] truncate" title={e.alerta_id}>{titulo(e.alerta_id)}</td>}
+                    <td className="py-2.5 pr-3 text-slate-600 max-w-[22rem]">{detalle(e)}</td>
+                    <td className="py-2.5 font-mono text-[10px] text-slate-400 whitespace-nowrap" title={`hash ${e.hash}\nanterior ${e.hash_prev}`}>#{e.seq} · {e.hash.slice(0, 8)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

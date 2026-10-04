@@ -60,7 +60,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - Hecho: vector bucket e índice propios (`centinela-vectors-<cuenta>/politicas`, `scripts/provision_vectores.py`); KB nueva `centinela-politicas-kb` (id `6WKO5PZCW3`) aplicada con Terraform; una sola copia de cada política con nombre canónico; los 12 vectores huérfanos de Centinela se borraron del índice compartido (los de la otra KB no se tocaron).
   - `knowledge.py` quedó en un solo camino (KB): el documento sale de la URI de S3, se descartan resultados ajenos y duplicados, la sección se deduce de los encabezados de cada política; sin KB devuelve vacío. Se eliminó el corpus embebido, el modo híbrido y la caché de embeddings.
   - `scripts/sync_knowledge_base.py` localiza la KB por nombre, ingiere y verifica 5 consultas (solo políticas, sin duplicados). `evals/test_knowledge_base.py`: 12 pruebas pasan.
-- [ ] **R6 · Configuración real (C7).** `[BAK]` `[FRO]`
+- [x] **R6 · Configuración real (C7)** (backend + UI verificados).** `[BAK]` `[FRO]`
   - a. Contrato `ConfigKpi` y tabla `centinela_config`: umbrales por KPI con sus valores por defecto tomados de `metricas.yaml` y de la política, y autonomía por tipo de acción (Informa/Propone/Ejecuta).
   - b. `GET /config` y `PUT /config` (validados).
   - c. El Vigía lee los umbrales (margen, días de mora, cobertura, descuento, intervalo, costo %) y la autonomía limita al Ejecutor (`Informa` no genera borradores).
@@ -76,7 +76,7 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - Hecho: el chat es un agente (Haiku 4.5) con herramientas `consultar_vista` (SQL parametrizado con agregados, `count(distinct)` y orden por alias) y `buscar_politica`, que responde con la herramienta `responder`: texto con marcadores `{cN}` y referencias a celdas de las consultas. **El servidor lee los valores** (`verificar_respuesta`); el modelo no escribe números (salvo umbrales literales de la política recuperada y números de nombres de producto devueltos por la consulta). Eventos SSE: `paso` (en vivo) → `token` → `cifra` → `grafico` → `fin` (consultas y costo real de Bedrock). Guardrail en la pregunta y en la respuesta; sin datos → "no tengo evidencia suficiente".
   - Hecho: se eliminó la lógica por palabras clave y `CENTINELA_BEDROCK_CHAT`; `proveedor_id` se añadió a `v_ventas` y `v_cobertura_inventario`; las consultas del chat quedan registradas y se sirven en `/consultas/{id}`.
   - Verificado con Bedrock real (9 pruebas, 3 corridas seguidas): "¿qué otros clientes compran los SKU P0001 y P0006?", "¿qué otros SKU le compramos al proveedor PR08?", la anclada a S1, política con umbral literal, gráfico con serie real, fuera de datos, inyección.
-- [ ] **R9 · Frontend sin entidades fijas (C3).** `[FRO]`
+- [x] **R9 · Frontend sin entidades fijas (C3)** (verificado en navegador: bandeja, detalle, chat, rechazo→reabrir→aprendizaje, bitácora).** `[FRO]`
   - a. Borrar `clasificarEscenario`, `esAlertaEstrategica`, `esCorteInicialLimpio` y los títulos con cifras fijas; usar `GET /alertas/resumen`.
   - b. Bandeja: banner con el dinero en riesgo y las 3 decisiones clave; el resto plegado y ordenado.
   - c. Mostrar `paso_actual`; chat con gráfico; bitácora general (R10); hitos del reloj solo con fechas, sin nombres de entidades.

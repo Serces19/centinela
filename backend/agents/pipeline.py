@@ -21,6 +21,7 @@ from contracts.alertas import Alerta
 from contracts.base import EstadoAlerta
 from contracts.bitacora import Evento
 from contracts.decision import Borrador, DecisionRequest, ResultadoEjecucion
+from contracts.evidencia import renderizar_texto
 from services.persistencia import persistencia_service
 from services.umbrales import cargar_autonomia
 
@@ -56,7 +57,7 @@ async def procesar_alerta_completa(
         evento=Evento.ANALISIS_COMPLETO,
         actor="analista",
         payload={
-            "resumen": diagnostico.resumen,
+            "resumen": renderizar_texto(diagnostico.resumen, diagnostico.cifras),
             "evidencia_suficiente": diagnostico.evidencia_suficiente,
             "confianza": diagnostico.confianza,
             "num_cifras": len(diagnostico.cifras),

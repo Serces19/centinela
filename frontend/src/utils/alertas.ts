@@ -1,204 +1,99 @@
 // frontend/src/utils/alertas.ts
-import { AlertaVista, Kpi } from '../types';
+// Utilidades genéricas de presentación de alertas. No dependen de entidades ni escenarios concretos:
+// todo se deriva de la familia de la causa (`huella_causa`), la severidad y el estado que entrega el backend.
+import { AlertaVista, EstadoAlerta, Severidad } from '../types';
 
-export interface EscenarioInfo {
-  codigo: 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6';
-  tag: string;
-  titulo: string;
-  badgeBg: string;
-  badgeText: string;
-  badgeBorder: string;
+export interface FamiliaInfo {
+  etiqueta: string;
+  titulo: (nombre?: string) => string;
+  badge: string; // clases de color del distintivo
 }
 
-/**
- * Fecha inicial de vigilancia limpia de Centinela.
- */
-export const CORTE_INICIAL_LIMPIO = '2026-06-18';
-export const CORTE_HITO_S1 = '2026-08-15';
-export const CORTE_HITO_CIERRE = '2026-09-30';
+const FAMILIAS: Record<string, FamiliaInfo> = {
+  costo: {
+    etiqueta: 'Costo y margen',
+    titulo: (n) => `Alza de costo del proveedor${n ? ` ${n}` : ''} sin ajuste de precios`,
+    badge: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  margen: {
+    etiqueta: 'Margen',
+    titulo: (n) => `Caída de margen en la línea${n ? ` ${n}` : ''}`,
+    badge: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  saldo_vencido: {
+    etiqueta: 'Cartera',
+    titulo: (n) => `Cartera vencida${n ? `: ${n}` : ''}`,
+    badge: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  cobertura_dias: {
+    etiqueta: 'Inventario',
+    titulo: (n) => `Riesgo de quiebre de inventario${n ? `: ${n}` : ''}`,
+    badge: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  descuento_en_exceso: {
+    etiqueta: 'Descuentos',
+    titulo: (n) => `Descuentos fuera de política${n ? `: ${n}` : ''}`,
+    badge: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  veces_intervalo_habitual: {
+    etiqueta: 'Clientes',
+    titulo: (n) => `Cliente que dejó de comprar${n ? `: ${n}` : ''}`,
+    badge: 'bg-purple-50 text-purple-700 border-purple-200',
+  },
+  venta_bajo_costo: {
+    etiqueta: 'Precios',
+    titulo: (n) => `Ventas por debajo del costo${n ? `: ${n}` : ''}`,
+    badge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  },
+};
 
-/**
- * Determina si la fecha corresponde al corte inicial limpio.
- */
-export function esCorteInicialLimpio(fechaCorte?: string): boolean {
-  if (!fechaCorte) return true;
-  const iso = fechaCorte.split('T')[0];
-  return iso <= CORTE_INICIAL_LIMPIO;
+const FAMILIA_DEFECTO: FamiliaInfo = {
+  etiqueta: 'Operación',
+  titulo: () => 'Desviación operacional detectada',
+  badge: 'bg-slate-50 text-slate-700 border-slate-200',
+};
+
+export const familiaDe = (huella: string): string => huella.split('|')[0];
+
+export const infoFamilia = (huella: string): FamiliaInfo => FAMILIAS[familiaDe(huella)] ?? FAMILIA_DEFECTO;
+
+/** Título de negocio derivado de la causa y de la entidad raíz (nombre resuelto si existe). */
+export function tituloAlerta(item: AlertaVista): string {
+  const raiz = item.alerta.huella_causa.split('|')[1];
+  return infoFamilia(item.alerta.huella_causa).titulo(item.nombres_resueltos[raiz] ?? raiz);
 }
 
-/**
- * Identifica si una alerta corresponde a uno de los escenarios estratégicos del reto
- * (S1 a S6) con impacto financiero directo.
- */
-export function clasificarEscenario(item: AlertaVista): EscenarioInfo | null {
-  const alerta = item.alerta;
-  const primerHallazgo = alerta.hallazgos[0];
-  if (!primerHallazgo) return null;
+export const ESTADOS_PENDIENTES: EstadoAlerta[] = ['nueva', 'en_analisis', 'propuesta'];
 
-  const regla = primerHallazgo.regla || '';
-  const kpi = primerHallazgo.kpi;
-  const entidadesIds = (primerHallazgo.entidades || []).map((e) => e.id);
+export const esPendiente = (item: AlertaVista): boolean => ESTADOS_PENDIENTES.includes(item.alerta.estado);
 
-  // S1: Incremento costo proveedor PR08 (+25%) y caída de margen
-  if (
-    regla.includes('costo') ||
-    kpi === 'margen_pct' ||
-    entidadesIds.includes('PR08') ||
-    entidadesIds.includes('P0021')
-  ) {
-    return {
-      codigo: 'S1',
-      tag: 'S1 · Costo Proveedor',
-      titulo: 'Incremento de costo proveedor PR08 (+25%) sin ajuste de precio de lista',
-      badgeBg: 'bg-rose-50',
-      badgeText: 'text-rose-700',
-      badgeBorder: 'border-rose-200',
-    };
-  }
+export const ETIQUETA_ESTADO: Record<EstadoAlerta, string> = {
+  nueva: 'Por analizar',
+  en_analisis: 'Analizando',
+  propuesta: 'Lista para decidir',
+  sin_evidencia: 'Sin evidencia',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  ejecutada: 'Ejecutada',
+  fallida: 'Fallida',
+};
 
-  // S2: Deterioro cartera y mora sobre cupo cliente C0496
-  if (entidadesIds.includes('C0496') || kpi === 'dias_pago_prom') {
-    return {
-      codigo: 'S2',
-      tag: 'S2 · Riesgo Cartera',
-      titulo: 'Deterioro severo en plazo de pago y mora prolongada sobre cupo (C0496)',
-      badgeBg: 'bg-amber-50',
-      badgeText: 'text-amber-800',
-      badgeBorder: 'border-amber-200',
-    };
-  }
+export const ETIQUETA_PASO: Record<string, string> = {
+  analista: 'El Analista investiga la causa',
+  estratega: 'El Estratega arma las acciones',
+};
 
-  // S3: Quiebre de inventario / Cobertura crítica P0119 en BOD-MDE
-  if (
-    regla.includes('cobertura') ||
-    kpi === 'cobertura_dias' ||
-    entidadesIds.includes('P0119') ||
-    entidadesIds.includes('BOD-MDE')
-  ) {
-    return {
-      codigo: 'S3',
-      tag: 'S3 · Quiebre Stock',
-      titulo: 'Riesgo inminente de quiebre de inventario (P0119 Gaseosa 3L en BOD-MDE)',
-      badgeBg: 'bg-rose-50',
-      badgeText: 'text-rose-700',
-      badgeBorder: 'border-rose-200',
-    };
-  }
+export const ETIQUETA_SEVERIDAD: Record<Severidad, string> = {
+  critica: 'Crítica',
+  alta: 'Alta',
+  media: 'Media',
+  baja: 'Baja',
+};
 
-  // S4: Descuentos excesivos fuera de política vendedor V03
-  if (
-    regla.includes('descuento') ||
-    kpi === 'descuento_en_exceso' ||
-    entidadesIds.includes('V03')
-  ) {
-    return {
-      codigo: 'S4',
-      tag: 'S4 · Descuento Excesivo',
-      titulo: 'Descuentos reiterados fuera de política comercial (Vendedor V03)',
-      badgeBg: 'bg-amber-50',
-      badgeText: 'text-amber-800',
-      badgeBorder: 'border-amber-200',
-    };
-  }
-
-  // S5: Inactividad prolongada y riesgo de fuga cliente C0061
-  if (
-    entidadesIds.includes('C0061') ||
-    (kpi === 'veces_intervalo_habitual' && (primerHallazgo.valor_observado || 0) >= 10)
-  ) {
-    return {
-      codigo: 'S5',
-      tag: 'S5 · Fuga de Cliente',
-      titulo: 'Inactividad crítica y riesgo inminente de fuga (Cliente Estratégico C0061)',
-      badgeBg: 'bg-purple-50',
-      badgeText: 'text-purple-700',
-      badgeBorder: 'border-purple-200',
-    };
-  }
-
-  // S6: Venta bajo costo reposición
-  if (
-    regla.includes('bajo_costo') ||
-    kpi === 'venta_bajo_costo' ||
-    entidadesIds.includes('P0097') ||
-    entidadesIds.includes('P0006')
-  ) {
-    return {
-      codigo: 'S6',
-      tag: 'S6 · Venta Bajo Costo',
-      titulo: 'Facturación por debajo del costo unitario de reposición',
-      badgeBg: 'bg-indigo-50',
-      badgeText: 'text-indigo-700',
-      badgeBorder: 'border-indigo-200',
-    };
-  }
-
-  return null;
-}
-
-/**
- * Determina si una alerta debe aparecer en la Bandeja Ejecutiva de Decisiones Estratégicas.
- * En el corte inicial limpio (2026-06-18), retorna false para mostrar estado limpio.
- */
-export function esAlertaEstrategica(item: AlertaVista, fechaCorte?: string): boolean {
-  if (esCorteInicialLimpio(fechaCorte)) {
-    return false;
-  }
-
-  const escenario = clasificarEscenario(item);
-  if (escenario) {
-    return true;
-  }
-
-  // Alertas críticas con alto impacto financiero (>= $500.000 COP) creadas post-corte inicial
-  const monto = item.alerta.dinero_en_riesgo_cop || 0;
-  const severidad = item.alerta.severidad;
-  const fechaCreacion = item.alerta.corte_creacion || '';
-
-  if (fechaCreacion > CORTE_INICIAL_LIMPIO && severidad === 'critica' && monto >= 500_000) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Genera el título amigable de negocio para una alerta.
- */
-export function getTituloNegocio(kpi: Kpi, entidadNombre?: string, regla?: string): string {
-  if (regla?.includes('costo')) {
-    return 'Caída crítica de margen por incremento de costo de proveedor';
-  }
-  if (regla?.includes('cobertura')) {
-    return 'Riesgo inminente de quiebre de inventario para demanda habitual';
-  }
-  if (regla?.includes('descuento')) {
-    return 'Descuentos aplicados por encima del margen de política comercial';
-  }
-  if (regla?.includes('bajo_costo')) {
-    return 'Detección de ventas facturadas por debajo del costo unitario reposición';
-  }
-
-  switch (kpi) {
-    case 'margen_pct':
-      return 'Caída crítica de margen por incremento de costo de proveedor';
-    case 'saldo_vencido':
-      return entidadNombre
-        ? `Riesgo de cartera con mora prolongada: ${entidadNombre}`
-        : 'Riesgo de cartera con mora prolongada sobre el cupo autorizado';
-    case 'dias_pago_prom':
-      return 'Deterioro severo en plazo promedio de cobro de cartera';
-    case 'cobertura_dias':
-      return 'Riesgo de quiebre de inventario inminente para demanda habitual';
-    case 'descuento_en_exceso':
-      return 'Descuentos aplicados por encima del margen de política comercial';
-    case 'veces_intervalo_habitual':
-      return entidadNombre
-        ? `Inactividad prolongada y riesgo de fuga: ${entidadNombre}`
-        : 'Inactividad prolongada y riesgo de fuga de cliente estratégico';
-    case 'venta_bajo_costo':
-      return 'Detección de ventas por debajo del costo unitario reposición';
-    default:
-      return 'Desviación operacional detectada en parámetros de negocio';
-  }
-}
+/** Severidad: color y también símbolo, para no depender solo del color. */
+export const ESTILO_SEVERIDAD: Record<Severidad, { clases: string; simbolo: string }> = {
+  critica: { clases: 'bg-rose-100 text-rose-800 border-rose-200', simbolo: '▲▲' },
+  alta: { clases: 'bg-amber-100 text-amber-800 border-amber-200', simbolo: '▲' },
+  media: { clases: 'bg-sky-100 text-sky-800 border-sky-200', simbolo: '●' },
+  baja: { clases: 'bg-slate-100 text-slate-700 border-slate-200', simbolo: '○' },
+};

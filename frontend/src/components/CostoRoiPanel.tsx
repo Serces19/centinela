@@ -1,210 +1,90 @@
 // frontend/src/components/CostoRoiPanel.tsx
-import React from 'react';
-import {
-  DollarSign,
-  TrendingUp,
-  Cpu,
-  Zap,
-  BarChart,
-  ShieldCheck,
-  Sparkles,
-  Layers,
-  ArrowUpRight,
-} from 'lucide-react';
-import { AlertaVista } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Cpu, DollarSign, Loader2, MessageSquare, ShieldCheck } from 'lucide-react';
+import { ResumenAlertas, ResumenCostos } from '../types';
+import { getCostos } from '../api/client';
 import { formatCOP } from '../utils/formatters';
 
 interface Props {
-  alertas: AlertaVista[];
+  resumen: ResumenAlertas | null;
 }
 
-export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
-  const dineroEnRiesgoTotal = alertas.reduce(
-    (acc, a) => acc + (a.alerta.dinero_en_riesgo_cop || 0),
-    0
-  );
+const NOMBRE_AGENTE: Record<string, string> = {
+  analista: 'Analista (explica la causa)',
+  estratega: 'Estratega (elige y justifica acciones)',
+  chat: 'Asistente de chat',
+};
 
-  // Estimación de costo por alerta con Haiku 4.5 (~0.003 USD por análisis completo)
-  const alertasAnalizadas = alertas.filter(
-    (a) => a.alerta.estado !== 'nueva'
-  ).length;
+const usd = (v: number | null | undefined, d = 4) => (v === null || v === undefined ? '—' : `US$ ${v.toFixed(d)}`);
 
-  const costoEstimadoUsd = Math.max(0.012, alertasAnalizadas * 0.0038);
-  const tokensEstimados = alertasAnalizadas * 2850;
+export const CostoRoiPanel: React.FC<Props> = ({ resumen }) => {
+  const [costos, setCostos] = useState<ResumenCostos | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Tasa de ROI: pesos en riesgo por cada USD invertido
-  const roiRatio =
-    costoEstimadoUsd > 0
-      ? Math.round(dineroEnRiesgoTotal / costoEstimadoUsd)
-      : 0;
+  useEffect(() => {
+    getCostos().then(setCostos).catch((e) => setError((e as Error).message));
+  }, [resumen]);
+
+  if (error) return <div role="alert" className="glass rounded-4xl p-8 text-center text-sm text-rose-700">{error}</div>;
+  if (!costos) return <div className="glass rounded-4xl p-10 text-center text-sm text-slate-500 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</div>;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <section className="glass rounded-4xl p-6 ">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Observabilidad Financiera & Retorno de Inversión
-          </span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            ROI 1:1.000+
-          </span>
-        </div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
-          Transparencia de Costos y Eficiencia de Inferencia
-        </h2>
-        <p className="text-xs text-slate-500 max-w-xl mt-0.5">
-          Métricas en tiempo real de consumo de tokens en Amazon Bedrock (Claude Haiku 4.5) comparado contra el capital financiero protegido en las operaciones.
-        </p>
+      <section className="glass rounded-4xl p-6">
+        <span className="section-eyebrow">Costo real de inferencia</span>
+        <h2 className="text-xl font-semibold text-slate-900">Lo que cuesta que Centinela analice y conteste</h2>
+        <p className="text-xs text-slate-500 mt-1 max-w-2xl">Se calcula con los tokens que reporta Amazon Bedrock en cada llamada (Claude Haiku 4.5), acumulados desde el último reinicio de la demo. No son estimaciones.</p>
       </section>
 
-      {/* Grid de Métricas Principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Dinero en Riesgo Protegido */}
-        <div className="glass rounded-4xl p-5  space-y-2">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Capital Vigilado Hoy</span>
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">
-            {formatCOP(dineroEnRiesgoTotal)}
-          </div>
-          <span className="text-[11px] text-slate-400 block">
-            En {alertas.length} alertas operacionales
-          </span>
+        <div className="glass rounded-4xl p-5 space-y-1">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-medium"><span>Costo total medido</span><DollarSign className="w-4 h-4 text-amber-500" /></div>
+          <div className="text-2xl font-black text-slate-900">{usd(costos.total_usd)}</div>
+          <span className="text-[11px] text-slate-400">{costos.llamadas} llamadas al modelo</span>
         </div>
-
-        {/* Costo Inferencia USD */}
-        <div className="glass rounded-4xl p-5  space-y-2">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Costo Total Inferencia</span>
-            <Zap className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">
-            ${costoEstimadoUsd.toFixed(4)} <span className="text-xs font-normal text-slate-500">USD</span>
-          </div>
-          <span className="text-[11px] text-slate-400 block">
-            ~${(costoEstimadoUsd * 4200).toFixed(0)} COP acumulado
-          </span>
+        <div className="glass rounded-4xl p-5 space-y-1">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-medium"><span>Costo por alerta analizada</span><ShieldCheck className="w-4 h-4 text-emerald-600" /></div>
+          <div className="text-2xl font-black text-slate-900">{usd(costos.usd_por_alerta)}</div>
+          <span className="text-[11px] text-slate-400">Analista + Estratega · {costos.alertas_analizadas} alerta(s)</span>
         </div>
-
-        {/* Tokens Consumidos */}
-        <div className="glass rounded-4xl p-5  space-y-2">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Tokens Consumidos</span>
-            <Cpu className="w-4 h-4 text-blue-500" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">
-            {tokensEstimados.toLocaleString()}
-          </div>
-          <span className="text-[11px] text-slate-400 block">
-            Claude Haiku 4.5 + Titan v2
-          </span>
+        <div className="glass rounded-4xl p-5 space-y-1">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-medium"><span>Costo por pregunta del chat</span><MessageSquare className="w-4 h-4 text-blue-500" /></div>
+          <div className="text-2xl font-black text-slate-900">{usd(costos.usd_por_pregunta_chat)}</div>
+          <span className="text-[11px] text-slate-400">Promedio de las preguntas hechas</span>
         </div>
-
-        {/* Multiplicador ROI */}
-        <div className="bg-white p-5 rounded-4xl bg-lime/60 border border-white space-y-2">
-          <div className="flex items-center justify-between text-emerald-800 text-xs font-medium">
-            <span>Multiplicador ROI</span>
-            <TrendingUp className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-2xl font-black text-emerald-700">
-            {(roiRatio / 1_000_000).toFixed(1)}M:1
-          </div>
-          <span className="text-[11px] text-emerald-600 font-medium block">
-            COP protegidos por cada $1 USD
-          </span>
+        <div className="glass rounded-4xl p-5 space-y-1">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-medium"><span>Tokens procesados</span><Cpu className="w-4 h-4 text-purple-500" /></div>
+          <div className="text-2xl font-black text-slate-900">{(costos.tokens_in + costos.tokens_out).toLocaleString('es-CO')}</div>
+          <span className="text-[11px] text-slate-400">{costos.tokens_in.toLocaleString('es-CO')} de entrada · {costos.tokens_out.toLocaleString('es-CO')} de salida</span>
         </div>
       </div>
 
-      {/* Desglose de Inferencia y Arquitectura Serverless */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Tabla de Modelos */}
-        <div className="glass rounded-4xl p-6  space-y-4">
-          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <Layers className="w-4 h-4 text-slate-500" />
-            Desglose de Modelos y Costo Unitario
-          </h3>
+      <section className="glass rounded-4xl p-6 space-y-3">
+        <h3 className="text-sm font-bold text-slate-900">Por agente</h3>
+        {costos.por_agente.length === 0 ? (
+          <p className="text-xs text-slate-500">Aún no hay llamadas al modelo. Analiza una alerta o haz una pregunta en el chat.</p>
+        ) : (
+          <table className="w-full text-xs">
+            <thead><tr className="text-left text-slate-400 uppercase tracking-wider text-[10px]"><th className="py-2 font-semibold">Agente</th><th className="py-2 font-semibold text-right">Llamadas</th><th className="py-2 font-semibold text-right">Tokens</th><th className="py-2 font-semibold text-right">Costo</th></tr></thead>
+            <tbody className="divide-y divide-white/70">
+              {costos.por_agente.map((a) => (
+                <tr key={a.agente}>
+                  <td className="py-2.5 font-semibold text-slate-800">{NOMBRE_AGENTE[a.agente] ?? a.agente}</td>
+                  <td className="py-2.5 text-right text-slate-600">{a.llamadas}</td>
+                  <td className="py-2.5 text-right text-slate-600">{(a.tokens_in + a.tokens_out).toLocaleString('es-CO')}</td>
+                  <td className="py-2.5 text-right font-mono text-slate-900">{usd(a.costo_usd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
-          <div className="space-y-3">
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">
-                  Claude Haiku 4.5 (Bedrock)
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Razonamiento del Analista, Estratega y Chat
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-xs font-mono font-bold text-slate-900 block">
-                  $1.00 / 1M tokens
-                </span>
-                <span className="text-[10px] text-emerald-600 font-medium">
-                  Caché activa (90% ahorro)
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">
-                  Amazon Titan Embed Text v2
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Indexación semántica de políticas PDF (RAG)
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-xs font-mono font-bold text-slate-900 block">
-                  $0.02 / 1M tokens
-                </span>
-                <span className="text-[10px] text-slate-400">Local fallback activo</span>
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">
-                  DuckDB Semántico en Lambda
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Cómputo en memoria sin costo de base de datos dedicada
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-xs font-mono font-bold text-emerald-700 block">
-                  $0.00 / query
-                </span>
-                <span className="text-[10px] text-slate-400">&lt; 15 ms por consulta</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Comparativa de Eficiencia Operativa */}
-        <div className="glass rounded-4xl p-6  space-y-4 flex flex-col justify-between">
-          <div className="space-y-2">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              Impacto en la Operación Diaria
-            </h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Centinela elimina la necesidad de auditorías manuales de planillas de cálculo. Cada anomalía es detectada por el Vigía en milisegundos, investigada formalmente y presentada con un borrador de acción listo para aprobación ejecutiva.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 space-y-2">
-            <div className="font-bold flex items-center gap-1.5 text-emerald-800">
-              <ArrowUpRight className="w-4 h-4 text-emerald-600" />
-              Retorno Comprobado del MVP
-            </div>
-            <p className="text-emerald-800 leading-relaxed">
-              Detectar a tiempo una sola caída de margen o una factura vencida de un cliente clave amortiza los costos de cómputo e infraestructura de Centinela durante más de <strong>12 meses continuos</strong>.
-            </p>
-          </div>
-        </div>
-      </div>
+      <section className="glass rounded-4xl p-6 text-xs text-slate-600 space-y-1.5">
+        <h3 className="text-sm font-bold text-slate-900">Para ponerlo en contexto</h3>
+        <p>Dinero en riesgo identificado hoy: <strong className="text-slate-900">{formatCOP(resumen?.total_dinero_en_riesgo_cop ?? 0)}</strong> en {resumen?.pendientes ?? 0} causas pendientes.</p>
+        <p>Las consultas SQL, el Vigía y la capa de datos corren en AWS Lambda sin servidores dedicados: no hay costo cuando nadie usa el sistema. El único costo que crece con el uso es el de los tokens de arriba.</p>
+      </section>
     </div>
   );
 };

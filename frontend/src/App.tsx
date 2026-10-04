@@ -1,5 +1,5 @@
 // frontend/src/App.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import { Sidebar, TabId } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
@@ -10,378 +10,263 @@ import { ChatSoporte } from './components/ChatSoporte';
 import { BitacoraViewer } from './components/BitacoraViewer';
 import { CostoRoiPanel } from './components/CostoRoiPanel';
 import { ConfiguracionPanel } from './components/ConfiguracionPanel';
-import {
-  AlertaVista,
-  DecisionRequest,
-  Persona,
-  ResultadoEjecucion,
-  SimulacionCorte,
-} from './types';
+import { ConsultaModal } from './components/ConsultaModal';
+import { AlertaVista, DecisionRequest, Persona, ResultadoEjecucion, ResumenAlertas, SimulacionCorte } from './types';
 import { PERSONAS_DISPONIBLES } from './utils/personas';
 import {
   avanzarSimulacion,
-  getAlertaDetalle,
   getAlertas,
   getCorte,
+  getResumen,
   procesarAlerta,
+  reabrirAlerta,
   reiniciarSimulacion,
   tomarDecision,
 } from './api/client';
 import { formatFecha } from './utils/formatters';
-import {
-  esAlertaEstrategica,
-  CORTE_INICIAL_LIMPIO,
-  CORTE_HITO_CIERRE,
-} from './utils/alertas';
+import { tituloAlerta } from './utils/alertas';
+import { textoPlano } from './utils/texto';
+
+const TITULOS: Record<TabId, { titulo: string; subtitulo: string }> = {
+  bandeja: { titulo: 'Bandeja de decisiones', subtitulo: 'Los problemas llegan a ti, explicados y con una propuesta lista para aprobar.' },
+  bitacora: { titulo: 'Auditoría', subtitulo: 'Quién aprobó qué, cuándo y qué ejecutó el agente, con cadena de hashes verificable.' },
+  metricas: { titulo: 'Costo de inferencia', subtitulo: 'Lo que cuesta, medido con los tokens reales de Bedrock.' },
+  configuracion: { titulo: 'Configuración', subtitulo: 'Umbrales de alerta y nivel de autonomía por tipo de acción.' },
+};
 
 export const App: React.FC = () => {
-  // 1. Estado de navegación y persona activa
   const [tabActiva, setTabActiva] = useState<TabId>('bandeja');
   const [personaActiva, setPersonaActiva] = useState<Persona>(PERSONAS_DISPONIBLES[0]);
-
-  // 2. Estado de reloj y alertas
   const [corte, setCorte] = useState<SimulacionCorte | null>(null);
-  const [loadingReloj, setLoadingReloj] = useState(false);
+  const [resumen, setResumen] = useState<ResumenAlertas | null>(null);
   const [alertas, setAlertas] = useState<AlertaVista[]>([]);
-  const [loadingAlertas, setLoadingAlertas] = useState(true);
-
-  // 3. Modales y paneles interactivos
-  const [alertaDetalle, setAlertaDetalle] = useState<AlertaVista | null>(null);
-  const [decisionModal, setDecisionModal] = useState<{
-    alertaVista: AlertaVista;
-    modo: 'aprobar' | 'editar' | 'rechazar';
-  } | null>(null);
-
-  const [menuAbierto, setMenuAbierto] = useState(false);
-  const [chatAbierto, setChatAbierto] = useState(false);
-  const [chatPrompt, setChatPrompt] = useState<string | undefined>(undefined);
-  const [alertaIdParaBitacora, setAlertaIdParaBitacora] = useState<string | undefined>(undefined);
-
-  // Conjunto de IDs de alertas en proceso
+  const [cargando, setCargando] = useState(true);
+  const [cargandoReloj, setCargandoReloj] = useState(false);
   const [procesandoIds, setProcesandoIds] = useState<Set<string>>(new Set());
 
-  // Cargar estado inicial del corte y alertas
-  const fetchEstado = useCallback(async () => {
-    try {
-      setLoadingReloj(true);
-      const corteData = await getCorte();
-      setCorte(corteData);
+  const [detalleId, setDetalleId] = useState<string | undefined>();
+  const [decision, setDecision] = useState<{ item: AlertaVista; modo: 'aprobar' | 'editar' | 'rechazar' } | null>(null);
+  const [consultaId, setConsultaId] = useState<string | undefined>();
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [chat, setChat] = useState<{ abierto: boolean; alertaId?: string }>({ abierto: false });
+  const [bitacoraAlerta, setBitacoraAlerta] = useState<string | undefined>();
+  const procesando = useRef(procesandoIds);
+  procesando.current = procesandoIds;
 
-      setLoadingAlertas(true);
-      const alertasData = await getAlertas(undefined, corteData.corte);
-      setAlertas(alertasData);
-    } catch (err: any) {
-      console.error('Error cargando estado inicial:', err);
-      toast.error('Error conectando con la API de Centinela: ' + err.message);
-    } finally {
-      setLoadingReloj(false);
-      setLoadingAlertas(false);
-    }
+  const detalle = useMemo(() => alertas.find((a) => a.alerta.alerta_id === detalleId) ?? null, [alertas, detalleId]);
+
+  const refrescar = useCallback(async (conCorte = true) => {
+    const [c, r, a] = await Promise.all([conCorte ? getCorte() : Promise.resolve(null), getResumen(), getAlertas()]);
+    if (c) setCorte(c);
+    setResumen(r);
+    setAlertas(a);
   }, []);
 
   useEffect(() => {
-    fetchEstado();
-  }, [fetchEstado]);
+    refrescar()
+      .catch((e) => toast.error(`No se pudo conectar con la API de Centinela: ${(e as Error).message}`))
+      .finally(() => setCargando(false));
+  }, [refrescar]);
 
-  // Polling inteligente cada 3 segundos si hay alertas en 'nueva' o 'en_analisis'
+  // Mientras alguna alerta se analiza, se consulta el estado cada 3 s para mostrar el paso en curso.
+  const hayEnCurso = procesandoIds.size > 0 || alertas.some((a) => a.alerta.estado === 'en_analisis');
   useEffect(() => {
-    const hayEnProceso = alertas.some(
-      (a) =>
-        a.alerta.estado === 'nueva' ||
-        a.alerta.estado === 'en_analisis' ||
-        procesandoIds.has(a.alerta.alerta_id)
-    );
+    if (!hayEnCurso) return;
+    const t = setInterval(() => refrescar(false).catch(() => undefined), 3000);
+    return () => clearInterval(t);
+  }, [hayEnCurso, refrescar]);
 
-    if (!hayEnProceso) return;
-
-    const interval = setInterval(async () => {
+  const analizar = useCallback(
+    async (alertaId: string, silencioso = false) => {
+      if (procesando.current.has(alertaId)) return;
+      setProcesandoIds((p) => new Set(p).add(alertaId));
       try {
-        if (!corte) return;
-        const alertasActualizadas = await getAlertas(undefined, corte.corte);
-        setAlertas(alertasActualizadas);
+        const vista = await procesarAlerta(alertaId);
+        if (!silencioso) {
+          toast.success(vista.propuesta ? 'Propuesta lista para tu decisión.' : 'El análisis terminó sin evidencia suficiente.');
+        }
       } catch (e) {
-        // silencioso en polling
+        toast.error((e as Error).message);
+      } finally {
+        setProcesandoIds((p) => {
+          const n = new Set(p);
+          n.delete(alertaId);
+          return n;
+        });
+        refrescar().catch(() => undefined);
       }
-    }, 3000);
+    },
+    [refrescar]
+  );
 
-    return () => clearInterval(interval);
-  }, [alertas, corte, procesandoIds]);
+  // Tras mover el reloj: las decisiones clave se analizan solas, sin pasos manuales.
+  const analizarClave = useCallback(async () => {
+    const r = await getResumen();
+    r.decisiones_clave.filter((a) => a.alerta.estado === 'nueva').forEach((a) => void analizar(a.alerta.alerta_id, true));
+  }, [analizar]);
 
-  // Avanzar reloj
-  const handleAvanzarReloj = async (dias: number) => {
+  const conReloj = async (accion: () => Promise<void>) => {
     try {
-      setLoadingReloj(true);
-      const res = await avanzarSimulacion(dias);
-      toast.success(
-        `Reloj avanzado ${dias} día(s) al corte: ${formatFecha(res.corte)}`
-      );
-      await fetchEstado();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al avanzar simulación');
+      setCargandoReloj(true);
+      await accion();
+      await refrescar();
+      await analizarClave();
+    } catch (e) {
+      toast.error((e as Error).message);
     } finally {
-      setLoadingReloj(false);
+      setCargandoReloj(false);
     }
   };
 
-  // Reiniciar reloj
-  const handleReiniciarReloj = async () => {
-    try {
-      setLoadingReloj(true);
-      const res = await reiniciarSimulacion();
-      toast.info(`Reloj restablecido al corte inicial: ${formatFecha(res.corte)}`);
-      await fetchEstado();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al reiniciar simulación');
-    } finally {
-      setLoadingReloj(false);
-    }
-  };
+  const avanzar = (dias: number) =>
+    conReloj(async () => {
+      const r = await avanzarSimulacion(dias);
+      toast.success(`Corte ${formatFecha(r.corte)}: ${r.alertas_detectadas} causas detectadas, ${r.alertas_nuevas} nuevas.`);
+    });
 
-  // Navegar a fecha o hito específico (soporta avanzar o retroceder)
-  const handleIrAFecha = async (fechaDestino: string) => {
-    try {
-      setLoadingReloj(true);
-      const fechaInicio = CORTE_INICIAL_LIMPIO;
-      const fechaMax = CORTE_HITO_CIERRE;
-      if (fechaDestino < fechaInicio || fechaDestino > fechaMax) {
-        toast.error(`Fecha fuera del rango permitido (${fechaInicio} a ${fechaMax})`);
-        return;
-      }
-      const fechaActualStr = corte?.corte ? corte.corte.split('T')[0] : fechaInicio;
-      if (fechaDestino === fechaActualStr) {
-        toast.info(`La simulación ya se encuentra en el corte ${formatFecha(fechaDestino)}`);
-        return;
-      }
+  const reiniciar = () =>
+    conReloj(async () => {
+      const r = await reiniciarSimulacion();
+      toast.info(`Demo reiniciada al corte ${formatFecha(r.corte)}.`);
+    });
 
-      const dDestino = new Date(fechaDestino + 'T00:00:00');
-      const dActual = new Date(fechaActualStr + 'T00:00:00');
-      const diffDias = Math.round((dDestino.getTime() - dActual.getTime()) / (1000 * 60 * 60 * 24));
+  const irAFecha = (fecha: string) =>
+    conReloj(async () => {
+      const actual = (corte?.corte ?? '').split('T')[0];
+      const dias = Math.round((new Date(`${fecha}T00:00:00`).getTime() - new Date(`${actual}T00:00:00`).getTime()) / 86400000);
+      if (dias === 0) return;
+      if (dias < 0) await reiniciarSimulacion();
+      const desde = dias < 0 ? (corte?.corte_inicial_limpio ?? actual).split('T')[0] : actual;
+      const saltar = Math.round((new Date(`${fecha}T00:00:00`).getTime() - new Date(`${desde}T00:00:00`).getTime()) / 86400000);
+      if (saltar > 0) await avanzarSimulacion(saltar);
+      toast.success(`Corte ${formatFecha(fecha)}.`);
+    });
 
-      if (diffDias > 0) {
-        await avanzarSimulacion(diffDias);
-        toast.success(`Reloj avanzado al corte: ${formatFecha(fechaDestino)}`);
-      } else {
-        await reiniciarSimulacion();
-        const dInicio = new Date(fechaInicio + 'T00:00:00');
-        const diffDesdeInicio = Math.round((dDestino.getTime() - dInicio.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDesdeInicio > 0) {
-          await avanzarSimulacion(diffDesdeInicio);
-        }
-        toast.info(`Reloj sincronizado al corte: ${formatFecha(fechaDestino)}`);
-      }
-      await fetchEstado();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cambiar fecha de simulación');
-    } finally {
-      setLoadingReloj(false);
-    }
-  };
-
-  // Procesar alerta con pipeline de agentes
-  const handleProcesarAlerta = async (alertaId: string) => {
-    try {
-      setProcesandoIds((prev) => new Set(prev).add(alertaId));
-      toast.info(`Iniciando pipeline de agentes (Vigía → Analista → Estratega) para ${alertaId}`);
-
-      const vistaActualizada = await procesarAlerta(alertaId, corte?.corte);
-
-      setAlertas((prev) =>
-        prev.map((a) => (a.alerta.alerta_id === alertaId ? vistaActualizada : a))
-      );
-
-      if (alertaDetalle?.alerta.alerta_id === alertaId) {
-        setAlertaDetalle(vistaActualizada);
-      }
-
-      toast.success(`Propuesta generada para ${alertaId}. Lista para decisión humana.`);
-    } catch (err: any) {
-      toast.error(err.message || `Error procesando alerta ${alertaId}`);
-    } finally {
-      setProcesandoIds((prev) => {
-        const next = new Set(prev);
-        next.delete(alertaId);
-        return next;
-      });
-    }
-  };
-
-  // Enviar decisión humana (aprobar, editar, rechazar)
-  const handleSubmitDecision = async (
-    alertaId: string,
-    request: DecisionRequest,
-    versionPrevia?: number
-  ): Promise<{ resultado: ResultadoEjecucion }> => {
-    const res = await tomarDecision(alertaId, request, versionPrevia);
-
-    // Actualizar lista local
-    setAlertas((prev) =>
-      prev.map((a) => {
-        if (a.alerta.alerta_id === alertaId) {
-          return {
-            ...a,
-            alerta: res.alerta,
-          };
-        }
-        return a;
-      })
-    );
-
-    if (alertaDetalle?.alerta.alerta_id === alertaId) {
-      setAlertaDetalle((prev) => (prev ? { ...prev, alerta: res.alerta } : null));
-    }
-
-    if (request.decision === 'aprobar') {
-      toast.success(`Alerta ${alertaId} aprobada y ejecutada en Sandbox con éxito.`);
-    } else if (request.decision === 'editar') {
-      toast.success(`Parámetros ajustados y ejecutados para ${alertaId}.`);
-    } else {
-      toast.info(`Propuesta ${alertaId} rechazada. Retroalimentación almacenada.`);
-    }
-
+  const decidir = async (alertaId: string, req: DecisionRequest, version?: number): Promise<{ resultado: ResultadoEjecucion }> => {
+    const res = await tomarDecision(alertaId, req, version);
+    await refrescar();
+    toast.success(req.decision === 'rechazar' ? 'Rechazo registrado; Centinela lo tendrá en cuenta.' : 'Decisión ejecutada en entorno seguro y registrada en la auditoría.');
     return { resultado: res.resultado };
   };
 
-  const handleVerBitacora = (alertaId: string) => {
-    setAlertaIdParaBitacora(alertaId);
+  const reabrir = async (alertaId: string) => {
+    try {
+      await reabrirAlerta(alertaId, personaActiva.id);
+      await refrescar();
+      toast.info('Alerta reabierta: Centinela vuelve a analizarla con lo aprendido.');
+      void analizar(alertaId, true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const verBitacora = (alertaId?: string) => {
+    setBitacoraAlerta(alertaId);
     setTabActiva('bitacora');
-    setAlertaDetalle(null);
+    setDetalleId(undefined);
   };
 
-  const handlePreguntarEnChat = (pregunta: string) => {
-    setChatPrompt(pregunta);
-    setChatAbierto(true);
-  };
+  const abrirChat = (alertaId?: string) => setChat({ abierto: true, alertaId });
 
-  const titulosPantallas: Record<TabId, { titulo: string; subtitulo: string }> = {
-    bandeja: {
-      titulo: 'Bandeja de Decisiones',
-      subtitulo: 'Riesgos operacionales detectados, diagnosticados y listos para tu aprobación.',
-    },
-    bitacora: {
-      titulo: 'Bitácora Inmutable',
-      subtitulo: 'Auditoría criptográfica encadenada con SHA-256 de cada decisión.',
-    },
-    metricas: {
-      titulo: 'Costo & Retorno',
-      subtitulo: 'Costo de inferencia de los agentes frente al dinero protegido (ROI).',
-    },
-    configuracion: {
-      titulo: 'Configuración',
-      subtitulo: 'Umbrales de KPIs y niveles de autonomía de los agentes.',
-    },
-  };
+  const sugerencias = useMemo(() => {
+    const a = alertas.find((x) => x.alerta.alerta_id === chat.alertaId);
+    if (!a) return ['¿Qué línea de producto vendió más y cuánto?', '¿Qué dice la política de crédito sobre la mora?', '¿Qué clientes tienen más cartera vencida?'];
+    const ids = [...new Set(a.alerta.hallazgos.flatMap((h) => h.entidades.map((e) => `${e.tipo}:${e.id}`)))];
+    const skus = ids.filter((i) => i.startsWith('sku:')).map((i) => i.slice(4)).slice(0, 2);
+    const prov = ids.find((i) => i.startsWith('proveedor:'))?.slice(10);
+    const cli = ids.find((i) => i.startsWith('cliente:'))?.slice(8);
+    return [
+      skus.length ? `¿Qué otros clientes compran los SKU ${skus.join(' y ')}?` : '',
+      prov ? `¿Qué otros SKU le compramos al proveedor ${prov}?` : '',
+      cli ? `¿Cuáles son los 5 productos que más compra el cliente ${cli}?` : '',
+      '¿Qué política aplica a este caso y qué exige?',
+    ].filter(Boolean);
+  }, [alertas, chat.alertaId]);
 
-  const fechaActual = corte?.corte ? corte.corte.split('T')[0] : CORTE_INICIAL_LIMPIO;
-  const alertasEstrategicas = alertas.filter((a) => esAlertaEstrategica(a, fechaActual));
-  const pendientesCount = alertasEstrategicas.filter(
-    (a) =>
-      a.alerta.estado === 'propuesta' ||
-      a.alerta.estado === 'nueva' ||
-      a.alerta.estado === 'en_analisis'
-  ).length;
+  const pendientes = resumen?.pendientes ?? 0;
 
   return (
     <div className="min-h-screen text-slate-900 flex font-sans antialiased">
       <Toaster position="top-right" richColors />
-
-      {/* 1. Barra Lateral de Navegación */}
       <Sidebar
         tabActiva={tabActiva}
-        onSelectTab={setTabActiva}
+        onSelectTab={(t) => { setTabActiva(t); if (t !== 'bitacora') setBitacoraAlerta(undefined); }}
         personaActiva={personaActiva}
-        onSelectPersona={(p) => {
-          setPersonaActiva(p);
-          toast.info(`Rol activo cambiado a: ${p.nombre} (${p.cargo})`);
-        }}
-        pendientesCount={pendientesCount}
+        onSelectPersona={(p) => { setPersonaActiva(p); toast.info(`Rol activo: ${p.nombre} (${p.cargo})`); }}
+        pendientesCount={pendientes}
         abierto={menuAbierto}
         onCerrar={() => setMenuAbierto(false)}
       />
 
-      {/* 2. Área Principal de Contenido */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar con reloj simulado, selector de fecha, hitos clave y toggle de chat */}
         <Topbar
           corte={corte}
-          loadingReloj={loadingReloj}
-          onAvanzar={handleAvanzarReloj}
-          onReiniciar={handleReiniciarReloj}
-          onIrAFecha={handleIrAFecha}
-          chatAbierto={chatAbierto}
-          onToggleChat={() => setChatAbierto(!chatAbierto)}
-          tituloPantalla={titulosPantallas[tabActiva].titulo}
-          subtituloPantalla={titulosPantallas[tabActiva].subtitulo}
+          loadingReloj={cargandoReloj}
+          onAvanzar={avanzar}
+          onReiniciar={reiniciar}
+          onIrAFecha={irAFecha}
+          chatAbierto={chat.abierto}
+          onToggleChat={() => setChat((c) => ({ abierto: !c.abierto, alertaId: c.alertaId }))}
+          tituloPantalla={TITULOS[tabActiva].titulo}
+          subtituloPantalla={TITULOS[tabActiva].subtitulo}
           onAbrirMenu={() => setMenuAbierto(true)}
         />
 
-        {/* Contenido según la pestaña activa */}
         <main key={tabActiva} className="flex-1 px-4 sm:px-6 lg:px-8 pt-3 pb-10 max-w-[1500px] w-full animate-fade-up">
           {tabActiva === 'bandeja' && (
             <BandejaDecisiones
+              resumen={resumen}
               alertas={alertas}
-              loading={loadingAlertas}
+              loading={cargando}
               corte={corte}
-              onSelectAlerta={(av) => setAlertaDetalle(av)}
-              onProcesarAlerta={handleProcesarAlerta}
-              onAbrirDecision={(av, modo) =>
-                setDecisionModal({ alertaVista: av, modo })
-              }
-              onVerBitacora={handleVerBitacora}
-              onIrAFecha={handleIrAFecha}
               procesandoIds={procesandoIds}
+              onSelectAlerta={(av) => setDetalleId(av.alerta.alerta_id)}
+              onProcesar={(id) => void analizar(id)}
+              onAbrirDecision={(item, modo) => setDecision({ item, modo })}
+              onReabrir={(id) => void reabrir(id)}
+              onVerBitacora={verBitacora}
             />
           )}
-
-          {tabActiva === 'bitacora' && (
-            <BitacoraViewer
-              alertas={alertas}
-              alertaSeleccionadaId={alertaIdParaBitacora}
-            />
-          )}
-
-          {tabActiva === 'metricas' && <CostoRoiPanel alertas={alertas} />}
-
-          {tabActiva === 'configuracion' && <ConfiguracionPanel />}
+          {tabActiva === 'bitacora' && <BitacoraViewer alertas={alertas} alertaSeleccionadaId={bitacoraAlerta} onLimpiarAlerta={() => setBitacoraAlerta(undefined)} />}
+          {tabActiva === 'metricas' && <CostoRoiPanel resumen={resumen} />}
+          {tabActiva === 'configuracion' && <ConfiguracionPanel personaActiva={personaActiva} onCambio={() => refrescar().catch(() => undefined)} />}
         </main>
       </div>
 
-      {/* 3. Panel Lateral Flotante de Chat Anclado */}
-      {chatAbierto && (
+      {chat.abierto && (
         <ChatSoporte
-          alertaId={alertaDetalle?.alerta.alerta_id}
-          onClose={() => setChatAbierto(false)}
-          initialPrompt={chatPrompt}
+          key={chat.alertaId ?? 'libre'}
+          alertaId={chat.alertaId}
+          sugerencias={sugerencias}
+          onClose={() => setChat((c) => ({ ...c, abierto: false }))}
+          onVerConsulta={setConsultaId}
         />
       )}
 
-      {/* 4. Modal de Detalle de Alerta en 3 Niveles */}
-      {alertaDetalle && (
+      {detalle && (
         <DetalleAlertaModal
-          alertaVista={alertaDetalle}
-          onClose={() => setAlertaDetalle(null)}
-          onAbrirDecision={(av, modo) =>
-            setDecisionModal({ alertaVista: av, modo })
-          }
-          onProcesarAlerta={handleProcesarAlerta}
-          onVerBitacora={handleVerBitacora}
-          onPreguntarEnChat={handlePreguntarEnChat}
-          estaProcesando={procesandoIds.has(alertaDetalle.alerta.alerta_id)}
+          alertaVista={detalle}
+          onClose={() => setDetalleId(undefined)}
+          onAbrirDecision={(item, modo) => setDecision({ item, modo })}
+          onProcesar={(id) => analizar(id)}
+          onReabrir={reabrir}
+          onVerBitacora={verBitacora}
+          onPreguntarEnChat={() => abrirChat(detalle.alerta.alerta_id)}
+          estaProcesando={procesandoIds.has(detalle.alerta.alerta_id)}
         />
       )}
 
-      {/* 5. Modal de Decisión Humana (HITL) */}
-      {decisionModal && (
+      {decision && (
         <DecisionModal
-          alertaVista={decisionModal.alertaVista}
-          modo={decisionModal.modo}
+          alertaVista={decision.item}
+          modo={decision.modo}
           personaActiva={personaActiva}
-          onClose={() => setDecisionModal(null)}
-          onSubmitDecision={handleSubmitDecision}
-          onExito={() => {
-            // El usuario cerrará manualmente para ver los borradores
-          }}
+          onClose={() => setDecision(null)}
+          onSubmitDecision={decidir}
         />
       )}
+
+      {consultaId && <ConsultaModal consultaId={consultaId} onClose={() => setConsultaId(undefined)} />}
     </div>
   );
 };

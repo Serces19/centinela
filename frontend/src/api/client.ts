@@ -3,18 +3,19 @@ import {
   Alerta,
   AlertaVista,
   BitacoraResponse,
-  CifraTrazable,
+  ChatEvento,
+  ConfiguracionVigia,
+  ConsultaRegistrada,
   DecisionRequest,
   ResultadoEjecucion,
+  ResumenAlertas,
+  ResumenCostos,
   SimulacionCorte,
   SimulacionResp,
 } from '../types';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  'https://kshttlmqbtzbjc5a73m5v6rfre0qimbv.lambda-url.us-east-1.on.aws';
-
-const API_KEY = import.meta.env.VITE_API_KEY || '';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '';
+const API_KEY = (import.meta.env.VITE_API_KEY as string | undefined) || '';
 
 function generateRequestId(): string {
   return `req-ui-${Math.random().toString(36).substring(2, 10)}`;
@@ -29,211 +30,115 @@ function getHeaders(customHeaders: Record<string, string> = {}): Record<string, 
   };
 }
 
-/**
- * Consulta la fecha de corte actual y configuración del reloj.
- */
-export async function getCorte(): Promise<SimulacionCorte> {
-  const resp = await fetch(`${API_BASE_URL}/simulacion/corte`, {
-    headers: getHeaders(),
-  });
+export class ApiError extends Error {
+  status: number;
+  codigo?: string;
+  constructor(mensaje: string, status: number, codigo?: string) {
+    super(mensaje);
+    this.status = status;
+    this.codigo = codigo;
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}, headers: Record<string, string> = {}): Promise<T> {
+  const resp = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: getHeaders(headers) });
   if (!resp.ok) {
-    throw new Error(`Error ${resp.status} al consultar corte de simulación`);
+    const err = await resp.json().catch(() => ({}));
+    throw new ApiError(err.mensaje || err.detail || `Error ${resp.status} en ${path}`, resp.status, err.codigo);
   }
   return resp.json();
 }
 
-/**
- * Avanza el reloj de simulación temporal.
- */
-export async function avanzarSimulacion(dias: number): Promise<SimulacionResp> {
-  const resp = await fetch(`${API_BASE_URL}/simulacion/avanzar?dias=${dias}`, {
-    method: 'POST',
-    headers: getHeaders(),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: 'Error desconocido' }));
-    throw new Error(err.detail || `Error ${resp.status} al avanzar simulación`);
-  }
-  return resp.json();
-}
+export const getCorte = () => request<SimulacionCorte>('/simulacion/corte');
 
-/**
- * Reinicia el reloj de simulación al corte inicial limpio (2026-06-18).
- */
-export async function reiniciarSimulacion(): Promise<SimulacionResp> {
-  const resp = await fetch(`${API_BASE_URL}/simulacion/reiniciar`, {
-    method: 'POST',
-    headers: getHeaders(),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: 'Error desconocido' }));
-    throw new Error(err.detail || `Error ${resp.status} al reiniciar simulación`);
-  }
-  return resp.json();
-}
+export const avanzarSimulacion = (dias: number) =>
+  request<SimulacionResp>(`/simulacion/avanzar?dias=${dias}`, { method: 'POST' });
 
-/**
- * Lista alertas enriquecidas con nombres resueltos (AlertaVista).
- */
-export async function getAlertas(estado?: string, corte?: string): Promise<AlertaVista[]> {
-  const params = new URLSearchParams();
-  if (estado) params.append('estado', estado);
-  if (corte) params.append('corte', corte);
+export const reiniciarSimulacion = () => request<SimulacionResp>('/simulacion/reiniciar', { method: 'POST' });
 
-  const url = `${API_BASE_URL}/alertas${params.toString() ? `?${params.toString()}` : ''}`;
-  const resp = await fetch(url, {
-    headers: getHeaders(),
-  });
-  if (!resp.ok) {
-    throw new Error(`Error ${resp.status} al listar alertas`);
-  }
-  return resp.json();
-}
+export const getAlertas = (estado?: string) =>
+  request<AlertaVista[]>(`/alertas${estado ? `?estado=${encodeURIComponent(estado)}` : ''}`);
 
-/**
- * Consulta el detalle enriquecido de una alerta por ID.
- */
-export async function getAlertaDetalle(alertaId: string): Promise<AlertaVista> {
-  const resp = await fetch(`${API_BASE_URL}/alertas/${alertaId}`, {
-    headers: getHeaders(),
-  });
-  if (!resp.ok) {
-    throw new Error(`Error ${resp.status} al obtener detalle de la alerta ${alertaId}`);
-  }
-  return resp.json();
-}
+export const getResumen = () => request<ResumenAlertas>('/alertas/resumen');
 
-/**
- * Dispara el pipeline de agentes para analizar una alerta.
- */
-export async function procesarAlerta(alertaId: string, corte?: string): Promise<AlertaVista> {
-  const url = `${API_BASE_URL}/alertas/${alertaId}/procesar${corte ? `?corte=${corte}` : ''}`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: getHeaders(),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: 'Error al procesar alerta' }));
-    throw new Error(err.mensaje || err.detail || `Error ${resp.status} al procesar alerta`);
-  }
-  return resp.json();
-}
+export const getAlertaDetalle = (alertaId: string) => request<AlertaVista>(`/alertas/${alertaId}`);
 
-/**
- * Toma una decisión humana (aprobar, editar, rechazar).
- */
-export async function tomarDecision(
+export const procesarAlerta = (alertaId: string) =>
+  request<AlertaVista>(`/alertas/${alertaId}/procesar`, { method: 'POST' });
+
+export const reabrirAlerta = (alertaId: string, actor: string) =>
+  request<AlertaVista>(`/alertas/${alertaId}/reabrir?actor=${encodeURIComponent(actor)}`, { method: 'POST' });
+
+export const getConsulta = (consultaId: string) => request<ConsultaRegistrada>(`/consultas/${consultaId}`);
+
+export const getCostos = () => request<ResumenCostos>('/costos');
+
+export const getConfig = () => request<ConfiguracionVigia>('/config');
+
+export const putConfig = (cambios: {
+  umbrales?: Record<string, number>;
+  autonomia?: Record<string, string>;
+  actor: string;
+}) => request<ConfiguracionVigia>('/config', { method: 'PUT', body: JSON.stringify(cambios) });
+
+export function tomarDecision(
   alertaId: string,
-  request: DecisionRequest,
+  decision: DecisionRequest,
   versionPrevia?: number
 ): Promise<{ alerta: Alerta; resultado: ResultadoEjecucion }> {
-  const idempotencyKey = `idem-${alertaId}-${request.decision}-${Date.now()}`;
-  const headers = getHeaders({
-    'Idempotency-Key': idempotencyKey,
-    ...(versionPrevia !== undefined ? { 'If-Match': `"${versionPrevia}"` } : {}),
-  });
-
-  const resp = await fetch(`${API_BASE_URL}/alertas/${alertaId}/decision`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(request),
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ mensaje: 'Error al tomar decisión' }));
-    const errorObj = new Error(err.mensaje || `Error ${resp.status} al registrar decisión`);
-    (errorObj as any).status = resp.status;
-    (errorObj as any).codigo = err.codigo;
-    throw errorObj;
-  }
-  return resp.json();
-}
-
-/**
- * Consulta y verifica la bitácora inmutable de una alerta.
- */
-export async function getBitacora(alertaId: string, verificar = true): Promise<BitacoraResponse> {
-  const resp = await fetch(
-    `${API_BASE_URL}/bitacora/${alertaId}?verificar=${verificar ? 'true' : 'false'}`,
+  return request(
+    `/alertas/${alertaId}/decision`,
+    { method: 'POST', body: JSON.stringify(decision) },
     {
-      headers: getHeaders(),
+      'Idempotency-Key': `idem-${alertaId}-${decision.decision}-${Date.now()}`,
+      ...(versionPrevia !== undefined ? { 'If-Match': `"${versionPrevia}"` } : {}),
     }
   );
-  if (!resp.ok) {
-    throw new Error(`Error ${resp.status} al consultar bitácora para ${alertaId}`);
-  }
-  return resp.json();
 }
 
-/**
- * Realiza una consulta con streaming SSE al endpoint POST /chat.
- */
+/** Auditoría de una alerta (con verificación de la cadena) o general si no se indica alerta. */
+export function getBitacora(opts: { alertaId?: string; actor?: string; evento?: string; limite?: number } = {}) {
+  const p = new URLSearchParams();
+  if (opts.alertaId) {
+    p.set('alerta_id', opts.alertaId);
+    p.set('verificar', 'true');
+  }
+  if (opts.actor) p.set('actor', opts.actor);
+  if (opts.evento) p.set('evento', opts.evento);
+  if (opts.limite) p.set('limite', String(opts.limite));
+  return request<BitacoraResponse>(`/bitacora${p.toString() ? `?${p.toString()}` : ''}`);
+}
+
+/** Chat con streaming SSE. Cada evento llega ya verificado por el servidor. */
 export async function streamChat(
   params: { alerta_id?: string; mensaje: string },
-  callbacks: {
-    onToken: (token: string) => void;
-    onCifra?: (cifra: CifraTrazable) => void;
-    onFin?: (fin: { consulta_ids: string[]; costo_usd: number }) => void;
-    onError?: (error: string) => void;
-  }
+  onEvento: (ev: ChatEvento) => void
 ): Promise<void> {
   const resp = await fetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
-    headers: getHeaders({
-      Accept: 'text/event-stream',
-    }),
-    body: JSON.stringify({
-      alerta_id: params.alerta_id || null,
-      mensaje: params.mensaje,
-    }),
+    headers: getHeaders({ Accept: 'text/event-stream' }),
+    body: JSON.stringify({ alerta_id: params.alerta_id || null, mensaje: params.mensaje }),
   });
-
   if (!resp.ok || !resp.body) {
-    throw new Error(`Error ${resp.status} al conectar al chat`);
+    throw new ApiError(`Error ${resp.status} al conectar con el chat`, resp.status);
   }
-
   const reader = resp.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('data:')) {
-          const jsonStr = trimmed.slice(5).trim();
-          if (!jsonStr) continue;
-
-          try {
-            const eventData = JSON.parse(jsonStr);
-            if (eventData.evento === 'token') {
-              callbacks.onToken(eventData.texto);
-            } else if (eventData.evento === 'cifra' && callbacks.onCifra) {
-              callbacks.onCifra(eventData.cifra);
-            } else if (eventData.evento === 'fin' && callbacks.onFin) {
-              callbacks.onFin({
-                consulta_ids: eventData.consulta_ids || [],
-                costo_usd: eventData.costo_usd || 0,
-              });
-            } else if (eventData.evento === 'error' && callbacks.onError) {
-              callbacks.onError(eventData.mensaje || 'Error en streaming del chat');
-            }
-          } catch (e) {
-            console.warn('Error parseando evento SSE:', jsonStr, e);
-          }
-        }
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const bloques = buffer.split('\n\n');
+    buffer = bloques.pop() || '';
+    for (const bloque of bloques) {
+      const linea = bloque.trim();
+      if (!linea.startsWith('data:')) continue;
+      try {
+        onEvento(JSON.parse(linea.slice(5).trim()) as ChatEvento);
+      } catch (e) {
+        console.warn('Evento SSE ilegible:', linea, e);
       }
-    }
-  } catch (err: any) {
-    if (callbacks.onError) {
-      callbacks.onError(err.message || 'Error en lectura de flujo');
     }
   }
 }

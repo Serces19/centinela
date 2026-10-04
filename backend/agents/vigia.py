@@ -32,7 +32,7 @@ from contracts.alertas import Alerta, Hallazgo
 from contracts.base import EntidadRef, EstadoAlerta, Kpi, SCHEMA_VERSION, Severidad, TipoEntidad
 from semantic.db import get_duckdb_connection
 from services.registro_consultas import ResultadoConsulta, ejecutar_registrada
-from services.telemetry import emitir_alertas_generadas, emitir_pipeline_latencia, log_evento
+from services.telemetry import emitir_pipeline_latencia, log_evento
 from services.umbrales import Umbrales, cargar_umbrales
 
 _SEVERIDAD_RANK = {Severidad.CRITICA: 4, Severidad.ALTA: 3, Severidad.MEDIA: 2, Severidad.BAJA: 1}
@@ -85,6 +85,13 @@ def _hid(*partes: Any) -> str:
 
 def _sev_por_monto(monto: int, critica_desde: int) -> Severidad:
     return Severidad.CRITICA if monto > critica_desde else Severidad.ALTA
+
+
+def _sev_inactividad(veces: float, umbral: float) -> Severidad:
+    """Cuanto más supera el cliente su intervalo habitual, más grave: el doble del umbral es crítico."""
+    if veces >= 2 * umbral:
+        return Severidad.CRITICA
+    return Severidad.ALTA if veces >= 1.3 * umbral else Severidad.MEDIA
 
 
 def _filas(res: ResultadoConsulta) -> list[dict[str, Any]]:
@@ -433,7 +440,7 @@ def _detectar_inactividad(con: Any, corte: date, u: Umbrales) -> list[Hallazgo]:
                 hallazgo_id=_hid("inactividad", r["cliente_id"], corte),
                 kpi=Kpi.INTERVALO_COMPRA,
                 regla="metricas/intervalo_compra",
-                severidad=_sev_por_monto(riesgo, 20_000_000),
+                severidad=_sev_inactividad(float(r["veces_intervalo_habitual"]), u.intervalo_veces),
                 entidades=[EntidadRef(tipo=TipoEntidad.CLIENTE, id=str(r["cliente_id"]))],
                 valor_observado=float(r["veces_intervalo_habitual"]),
                 umbral=u.intervalo_veces,
@@ -570,7 +577,6 @@ def generar_alertas(corte: date, con: Any = None, umbrales: Umbrales | None = No
             version=1,
         )
         alertas.append(alerta)
-        emitir_alertas_generadas(kpi=items[0].kpi.value, severidad=severidad.value, count=1)
 
     alertas.sort(key=lambda a: a.dinero_en_riesgo_cop, reverse=True)
 

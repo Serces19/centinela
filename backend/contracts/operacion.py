@@ -26,6 +26,26 @@ class TrazaLLM(Contrato):
     ts: datetime
 
 
+class CostoAgente(Contrato):
+    agente: str
+    llamadas: int = Field(ge=0)
+    tokens_in: int = Field(ge=0)
+    tokens_out: int = Field(ge=0)
+    costo_usd: float = Field(ge=0)
+
+
+class ResumenCostos(Contrato):
+    """Costo real de inferencia (tokens que reporta Bedrock) acumulado desde el último reinicio de la demo."""
+    total_usd: float = Field(ge=0)
+    llamadas: int = Field(ge=0)
+    tokens_in: int = Field(ge=0)
+    tokens_out: int = Field(ge=0)
+    por_agente: list[CostoAgente]
+    alertas_analizadas: int = Field(ge=0)
+    usd_por_alerta: float | None = None          # promedio por alerta con análisis y propuesta (analista + estratega)
+    usd_por_pregunta_chat: float | None = None
+
+
 class ChatRequest(Contrato):
     alerta_id: AlertaId | None = None                    # chat anclado o libre
     mensaje: str = Field(min_length=1, max_length=2000)

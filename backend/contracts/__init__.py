@@ -82,6 +82,8 @@ from .operacion import (
     ChatGrafico,
     ChatPaso,
     ChatRequest,
+    CostoAgente,
+    ResumenCostos,
     ChatToken,
     PuntoGrafico,
     RefCifra,
@@ -161,6 +163,8 @@ __all__ = [
     # Operacion
     "TrazaLLM",
     "ChatRequest",
+    "CostoAgente",
+    "ResumenCostos",
     "ChatToken",
     "ChatCifra",
     "ChatFin",

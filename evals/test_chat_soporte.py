@@ -156,3 +156,27 @@ def test_verificar_respuesta_rechaza_numeros_propios_y_referencias_falsas():
     # un umbral literal de la política recuperada sí se permite
     texto, _, _ = verificar_respuesta(RespuestaChat(texto="El tope es 10 % según la política."), consultas, {"10"})
     assert "10" in texto
+
+
+def test_contar_filas_solo_si_el_resultado_no_esta_recortado():
+    recortada = _consulta_ventas()            # limite = 7 y hay 7 líneas: el resultado puede estar recortado
+    qid = next(iter(recortada))
+    r = RespuestaChat(
+        texto="Hay {c1} líneas.",
+        cifras=[RefCifra(etiqueta="Líneas", unidad="lineas", consulta_id=qid, columna="__filas__", fila=0)],
+    )
+    with pytest.raises(RespuestaInvalida, match="recortado"):
+        verificar_respuesta(r, recortada, set())
+
+    completa_out = consultar_vista(
+        ConsultarVistaIn(vista="v_ventas", columnas=["linea", "sum(valor_neto) as ventas"], agrupar_por=["linea"], limite=500),
+        corte=date(2026, 9, 30),
+    )
+    completa = {completa_out.consulta.consulta_id: completa_out}
+    qid2 = next(iter(completa))
+    r2 = RespuestaChat(
+        texto="Hay {c1} líneas.",
+        cifras=[RefCifra(etiqueta="Líneas", unidad="lineas", consulta_id=qid2, columna="__filas__", fila=0)],
+    )
+    texto, cifras, _ = verificar_respuesta(r2, completa, set())
+    assert cifras[0].valor == 7 and "7 líneas" in texto

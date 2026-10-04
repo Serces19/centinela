@@ -118,3 +118,8 @@ def test_bitacora_general_con_filtros(client):
     una = general["entradas"][0]["alerta_id"]
     detalle = client.get(f"/bitacora?alerta_id={una}&verificar=true").json()
     assert detalle["cadena_valida"] is True
+
+
+def test_costos_reales_por_agente(client):
+    base = client.get("/costos").json()
+    assert base["total_usd"] == 0 and base["usd_por_alerta"] is None and base["por_agente"] == []

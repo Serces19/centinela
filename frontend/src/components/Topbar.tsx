@@ -10,12 +10,6 @@ import {
 } from 'lucide-react';
 import { formatFecha } from '../utils/formatters';
 import { SimulacionCorte } from '../types';
-import {
-  CORTE_INICIAL_LIMPIO,
-  CORTE_HITO_S1,
-  CORTE_HITO_CIERRE,
-} from '../utils/alertas';
-
 interface Props {
   corte: SimulacionCorte | null;
   loadingReloj: boolean;
@@ -29,41 +23,14 @@ interface Props {
   onAbrirMenu: () => void;
 }
 
-interface HitoDemo {
+interface Atajo {
   fecha: string;
   label: string;
   sublabel: string;
-  colorDot: string;
-  colorActive: string;
-  tooltip: string;
 }
 
-const HITOS_DEMO: HitoDemo[] = [
-  {
-    fecha: CORTE_INICIAL_LIMPIO,
-    label: '18 Jun',
-    sublabel: 'Corte Limpio',
-    colorDot: 'bg-emerald-500',
-    colorActive: 'bg-lime text-lime-ink',
-    tooltip: '🟢 Corte Inicial Limpio (18 Jun 2026): 0 desviaciones críticas, operación en estado óptimo',
-  },
-  {
-    fecha: CORTE_HITO_S1,
-    label: '15 Ago',
-    sublabel: 'Hito S1',
-    colorDot: 'bg-amber-500',
-    colorActive: 'bg-amber-100 text-amber-800',
-    tooltip: '🟠 Hito S1 (15 Ago 2026): Alerta de proveedor PR08 incrementa costo +25% ($23.5M en riesgo)',
-  },
-  {
-    fecha: CORTE_HITO_CIERRE,
-    label: '30 Sep',
-    sublabel: 'Cierre S1-S5',
-    colorDot: 'bg-rose-500',
-    colorActive: 'bg-blush text-blush-ink',
-    tooltip: '🔴 Hito Cierre (30 Sep 2026): Escenarios S1 a S5 activos listos para decisión humana',
-  },
-];
+// Fechas de atajo para la demostración: el inicio, mediados de agosto y el cierre del periodo de datos.
+const iso = (f?: string, defecto = '') => (f ? f.split('T')[0] : defecto);
 
 export const Topbar: React.FC<Props> = ({
   corte,
@@ -80,10 +47,15 @@ export const Topbar: React.FC<Props> = ({
   const [loadingDias, setLoadingDias] = useState<number | null>(null);
   const [loadingHito, setLoadingHito] = useState<string | null>(null);
 
-  const fechaActualIso = corte?.corte
-    ? corte.corte.split('T')[0]
-    : CORTE_INICIAL_LIMPIO;
-  const esCorteInicial = fechaActualIso <= CORTE_INICIAL_LIMPIO;
+  const inicio = iso(corte?.corte_inicial_limpio, '2026-06-18');
+  const cierre = iso(corte?.corte_maximo, '2026-09-30');
+  const fechaActualIso = iso(corte?.corte, inicio);
+  const esCorteInicial = fechaActualIso <= inicio;
+  const atajos: Atajo[] = [
+    { fecha: inicio, label: formatFecha(inicio).replace(/ de \d{4}| \d{4}$/, ''), sublabel: 'Inicio' },
+    { fecha: '2026-08-15', label: '15 ago', sublabel: 'Mediados de agosto' },
+    { fecha: cierre, label: formatFecha(cierre).replace(/ de \d{4}| \d{4}$/, ''), sublabel: 'Cierre' },
+  ];
 
   const handleAvanzarClick = async (dias: number) => {
     try {
@@ -156,15 +128,15 @@ export const Topbar: React.FC<Props> = ({
       <div className="flex items-center gap-2 no-scrollbar overflow-x-auto pb-1 -mx-1 px-1">
         <div
           className="flex items-center gap-2 pl-3 pr-3 h-11 rounded-full glass shrink-0"
-          title="Seleccionar fecha simulada (entre 18 Jun 2026 y 30 Sep 2026)"
+          title="Seleccionar la fecha simulada del sistema"
         >
           <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
           <div className="flex flex-col leading-none">
             <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400">Corte simulado</span>
             <input
               type="date"
-              min={CORTE_INICIAL_LIMPIO}
-              max={CORTE_HITO_CIERRE}
+              min={inicio}
+              max={cierre}
               value={fechaActualIso}
               onChange={handleDateInputChange}
               disabled={deshabilitado}
@@ -175,7 +147,7 @@ export const Topbar: React.FC<Props> = ({
         </div>
 
         <div className="flex items-center gap-1 p-1 h-11 rounded-full glass shrink-0">
-          {HITOS_DEMO.map((hito) => {
+          {atajos.map((hito) => {
             const esActivo = fechaActualIso === hito.fecha;
             const estaCargando = loadingHito === hito.fecha;
             return (
@@ -183,16 +155,13 @@ export const Topbar: React.FC<Props> = ({
                 key={hito.fecha}
                 onClick={() => handleHitoClick(hito.fecha)}
                 disabled={deshabilitado}
-                title={hito.tooltip}
+                title={`Ir al ${formatFecha(hito.fecha)}`}
+                aria-pressed={esActivo}
                 className={`h-9 px-3 rounded-full text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 ${
-                  esActivo ? `${hito.colorActive} shadow-xs` : 'text-slate-600 hover:bg-white'
+                  esActivo ? 'bg-lime text-lime-ink shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
-                {estaCargando ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <span className={`w-2 h-2 rounded-full ${hito.colorDot}`} />
-                )}
+                {estaCargando && <Loader2 className="w-3 h-3 animate-spin" />}
                 <span>{hito.label}</span>
                 <span className="hidden xl:inline text-[10px] font-normal opacity-60">{hito.sublabel}</span>
               </button>
@@ -201,7 +170,7 @@ export const Topbar: React.FC<Props> = ({
         </div>
 
         <div className="flex items-center gap-1 p-1 h-11 rounded-full glass shrink-0">
-          {[1, 7].map((d) => (
+          {[1, 7, 30].map((d) => (
             <button
               key={d}
               onClick={() => handleAvanzarClick(d)}

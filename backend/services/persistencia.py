@@ -535,6 +535,21 @@ class PersistenciaService:
             logger.error(f"Error obteniendo trazas {alerta_id}: {e}")
             raise
 
+    def listar_trazas(self) -> list[TrazaLLM]:
+        """Todas las trazas LLM guardadas (sin las consultas registradas)."""
+        if self.use_memory:
+            return [TrazaLLM.model_validate(r) for lista in self._mem_trazas.values() for r in lista]
+        resp = self.tbl_trazas.scan()
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = self.tbl_trazas.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+            items.extend(resp.get("Items", []))
+        return [
+            TrazaLLM.model_validate(json.loads(it["payload"]))
+            for it in items
+            if not str(it["alerta_id"]).startswith("QUERY#") and "agente" in it
+        ]
+
     # -------------------------------------------------------------------------
     # centinela_config (configuración y feedback de rechazos)
     # -------------------------------------------------------------------------
@@ -695,9 +710,18 @@ class PersistenciaService:
             return 1
 
         if self.use_memory:
-            return sum(_crear(a) for a in alertas)
-        with ThreadPoolExecutor(max_workers=12) as pool:
-            return sum(pool.map(_crear, alertas))
+            creadas = sum(_crear(a) for a in alertas)
+        else:
+            with ThreadPoolExecutor(max_workers=12) as pool:
+                creadas = sum(pool.map(_crear, alertas))
+
+        from collections import Counter
+
+        from services.telemetry import emitir_alertas_generadas
+
+        for (kpi, sev), n in Counter((a.hallazgos[0].kpi.value, a.severidad.value) for a in alertas).items():
+            emitir_alertas_generadas(kpi=kpi, severidad=sev, count=n)
+        return creadas
 
     def borrar_estado_demo(self) -> dict[str, int]:
         """Reinicio de demo: borra alertas, propuestas, ejecuciones, trazas y rechazos. La bitácora se conserva."""

@@ -17,6 +17,7 @@ Endpoints (todos exigen `x-api-key`, salvo /health):
 - POST /chat                            Preguntas en lenguaje natural (streaming SSE).
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
@@ -44,7 +45,7 @@ from contracts.configuracion import (
     ConfiguracionVigia,
 )
 from contracts.decision import DecisionRequest
-from contracts.operacion import ChatRequest, ErrorAPI, SimulacionResp
+from contracts.operacion import ChatRequest, CostoAgente, ErrorAPI, ResumenCostos, SimulacionResp
 from services.auth import RUTAS_PUBLICAS, auth_deshabilitada, clave_valida
 from services.chat import generar_respuesta_chat_stream
 from services.persistencia import persistencia_service
@@ -70,6 +71,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("centinela.api")
 
 ESTADOS_PENDIENTES = (EstadoAlerta.NUEVA, EstadoAlerta.EN_ANALISIS, EstadoAlerta.PROPUESTA)
+_RANGO_SEVERIDAD = {"critica": 4, "alta": 3, "media": 2, "baja": 1}
 ESTADOS_RESUELTOS = (EstadoAlerta.APROBADA, EstadoAlerta.EJECUTADA, EstadoAlerta.RECHAZADA, EstadoAlerta.SIN_EVIDENCIA)
 
 
@@ -309,7 +311,7 @@ def resumen_alertas():
     # Decisiones clave: la mayor alerta de cada familia de causa (costo/margen, cartera, inactividad...), hasta tres.
     clave: list[Alerta] = []
     familias: set[str] = set()
-    for a in sorted(pendientes, key=lambda x: x.dinero_en_riesgo_cop, reverse=True):
+    for a in sorted(pendientes, key=lambda x: (_RANGO_SEVERIDAD[x.severidad.value], x.dinero_en_riesgo_cop), reverse=True):
         familia = a.huella_causa.split("|", 1)[0]
         if familia in familias:
             continue
@@ -342,7 +344,7 @@ def obtener_alerta_detalle(alerta_id: str, request: Request, response: Response)
 
 
 @app.post("/alertas/{alerta_id}/procesar", response_model=AlertaVista, tags=["Alertas"])
-async def procesar_alerta_endpoint(alerta_id: str, request: Request, response: Response):
+def procesar_alerta_endpoint(alerta_id: str, request: Request, response: Response):
     """Analista y Estratega sobre una alerta: nueva -> en_analisis -> propuesta (idempotente)."""
     alerta = _alerta_actual(alerta_id)
     if not alerta:
@@ -353,7 +355,7 @@ async def procesar_alerta_endpoint(alerta_id: str, request: Request, response: R
         persistencia_service.actualizar_alerta(alerta)   # refresca hallazgos al corte actual
     corte = persistencia_service.obtener_reloj()["corte"]
     try:
-        alerta_act, _ = await procesar_alerta_completa(alerta_id, corte=corte)
+        alerta_act, _ = asyncio.run(procesar_alerta_completa(alerta_id, corte=corte))
     except Exception as e:  # noqa: BLE001
         logger.exception("Fallo procesando %s", alerta_id)
         return _error(request, "interno", f"No se pudo procesar la alerta: {e}", 500)
@@ -432,6 +434,38 @@ def obtener_consulta(consulta_id: str, request: Request):
     if consulta is None:
         return _error(request, "no_encontrado", f"Consulta '{consulta_id}' no encontrada.", 404)
     return consulta.model_dump(mode="json")
+
+
+# -----------------------------------------------------------------------------
+# Costos reales de inferencia
+# -----------------------------------------------------------------------------
+@app.get("/costos", response_model=ResumenCostos, tags=["Costos"])
+def resumen_costos():
+    """Costo de inferencia medido (tokens de Bedrock) por agente y por alerta, desde el último reinicio de la demo."""
+    trazas = persistencia_service.listar_trazas()
+    por_agente: dict[str, CostoAgente] = {}
+    for t in trazas:
+        a = por_agente.get(t.agente) or CostoAgente(agente=t.agente, llamadas=0, tokens_in=0, tokens_out=0, costo_usd=0.0)
+        por_agente[t.agente] = CostoAgente(
+            agente=t.agente, llamadas=a.llamadas + 1, tokens_in=a.tokens_in + t.tokens_in,
+            tokens_out=a.tokens_out + t.tokens_out, costo_usd=round(a.costo_usd + t.costo_usd, 6),
+        )
+    por_alerta: dict[str, float] = {}
+    for t in trazas:
+        if t.alerta_id and t.agente in ("analista", "estratega"):
+            por_alerta[t.alerta_id] = por_alerta.get(t.alerta_id, 0.0) + t.costo_usd
+    chats = por_agente.get("chat")
+    preguntas = len({t.run_id for t in trazas if t.agente == "chat"})
+    return ResumenCostos(
+        total_usd=round(sum(a.costo_usd for a in por_agente.values()), 6),
+        llamadas=sum(a.llamadas for a in por_agente.values()),
+        tokens_in=sum(a.tokens_in for a in por_agente.values()),
+        tokens_out=sum(a.tokens_out for a in por_agente.values()),
+        por_agente=sorted(por_agente.values(), key=lambda a: a.agente),
+        alertas_analizadas=len(por_alerta),
+        usd_por_alerta=round(sum(por_alerta.values()) / len(por_alerta), 6) if por_alerta else None,
+        usd_por_pregunta_chat=round(chats.costo_usd / preguntas, 6) if chats and preguntas else None,
+    )
 
 
 # -----------------------------------------------------------------------------
