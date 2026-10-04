@@ -15,6 +15,7 @@ class Evento(StrEnum):
     PROPUESTA_GENERADA = "propuesta_generada"
     DECISION_HUMANA = "decision_humana"
     ACCION_EJECUTADA = "accion_ejecutada"
+    ALERTA_REABIERTA = "alerta_reabierta"
     GUARDRAIL_INTERVINO = "guardrail_intervino"
     ERROR = "error"
 

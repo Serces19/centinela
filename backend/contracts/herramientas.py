@@ -48,18 +48,6 @@ class BuscarPoliticaOut(Contrato):
     guardrail_ataque_detectado: bool = False     # resultado de ApplyGuardrail sobre los fragmentos
 
 
-class CalcularImpactoIn(Contrato):
-    metodo: Literal[
-        "delta_costo_x_unidades_30d",
-        "exceso_descuento",
-        "cartera_vencida_en_riesgo",
-        "margen_perdido_bajo_costo",
-        "ventas_perdidas_cliente_inactivo",
-        "ventas_perdidas_quiebre",
-    ]
-    parametros: dict[str, str | int | float | list[str]]
-
-
 class CrearBorradorIn(Contrato):
     alerta_id: AlertaId
     accion_id: AccionId                          # el Ejecutor solo acepta acciones en estado `aprobada`

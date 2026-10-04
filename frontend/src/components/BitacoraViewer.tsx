@@ -147,7 +147,7 @@ export const BitacoraViewer: React.FC<Props> = ({
   return (
     <div className="space-y-6">
       {/* Header y Selector de Alerta */}
-      <section className="bg-white rounded-3xl p-6 border border-slate-200/70 shadow-card flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <section className="glass rounded-4xl p-6  flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -230,7 +230,7 @@ export const BitacoraViewer: React.FC<Props> = ({
       )}
 
       {/* Tabla de Bitácora */}
-      <div className="bg-white rounded-3xl border border-slate-200/70 shadow-card overflow-hidden">
+      <div className="glass rounded-4xl  overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-400">
             Cargando entradas de bitácora...

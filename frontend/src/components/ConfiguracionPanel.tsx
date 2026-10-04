@@ -33,7 +33,7 @@ export const ConfiguracionPanel: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="bg-white rounded-3xl p-6 border border-slate-200/70 shadow-card">
+      <section className="glass rounded-4xl p-6 ">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Gobernanza de Agentes & Parámetros Operacionales
@@ -52,7 +52,7 @@ export const ConfiguracionPanel: React.FC = () => {
 
       <form onSubmit={handleGuardar} className="space-y-6">
         {/* 1. Umbrales de los KPIs Vigilados */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/70 shadow-card space-y-5">
+        <div className="glass rounded-4xl p-6  space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">
@@ -167,7 +167,7 @@ export const ConfiguracionPanel: React.FC = () => {
         </div>
 
         {/* 2. Matriz de Autonomía de IA */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/70 shadow-card space-y-5">
+        <div className="glass rounded-4xl p-6  space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">

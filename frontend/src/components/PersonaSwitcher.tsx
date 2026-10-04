@@ -32,10 +32,10 @@ export const PersonaSwitcher: React.FC<Props> = ({
   return (
     <div className="relative w-full" ref={containerRef}>
       {isOpen && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-2xl shadow-modal border border-slate-200/80 p-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="absolute bottom-full left-0 right-0 mb-2 glass-strong rounded-3xl shadow-modal p-2 z-50 animate-fade-up">
           <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Alternar Rol de Usuario
+              Cambiar decisor
             </span>
             <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
               <ShieldCheck className="w-3 h-3" />
@@ -82,11 +82,11 @@ export const PersonaSwitcher: React.FC<Props> = ({
       {/* Pill activador de usuario */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-2 rounded-2xl bg-white border border-slate-200/70 hover:border-slate-300 hover:shadow-subtle transition-all text-left group"
+        className="w-full flex items-center justify-between p-2 rounded-3xl bg-white/90 border border-white shadow-float hover:shadow-modal transition-all text-left group cursor-pointer"
         title="Clic para cambiar de rol activo"
       >
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-lg shrink-0 border border-slate-200/60 shadow-xs">
+          <div className="w-10 h-10 rounded-full bg-aqua/60 flex items-center justify-center text-lg shrink-0 border border-white">
             {personaActiva.avatar}
           </div>
           <div className="truncate">

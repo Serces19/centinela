@@ -179,7 +179,7 @@ export const ChatSoporte: React.FC<Props> = ({
   ];
 
   return (
-    <aside className="w-96 bg-white border-l border-slate-200/70 shadow-2xl flex flex-col h-screen fixed right-0 top-0 z-40 animate-in slide-in-from-right duration-200">
+    <aside className="w-[calc(100vw-1.5rem)] sm:w-[400px] glass-strong rounded-4xl shadow-modal flex flex-col fixed right-3 top-3 bottom-3 z-50 overflow-hidden animate-fade-up">
       {/* Header */}
       <div className="h-18 px-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <div className="flex items-center gap-2.5">

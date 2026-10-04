@@ -78,7 +78,7 @@ TRANSICIONES: dict[EstadoAlerta, set[EstadoAlerta]] = {
     EstadoAlerta.PROPUESTA: {EstadoAlerta.APROBADA, EstadoAlerta.RECHAZADA},
     EstadoAlerta.APROBADA: {EstadoAlerta.EJECUTADA, EstadoAlerta.FALLIDA},
     EstadoAlerta.SIN_EVIDENCIA: set(),
-    EstadoAlerta.RECHAZADA: set(),
+    EstadoAlerta.RECHAZADA: {EstadoAlerta.NUEVA},     # reabrir para volver a proponer con lo aprendido
     EstadoAlerta.EJECUTADA: set(),
     EstadoAlerta.FALLIDA: {EstadoAlerta.NUEVA},     # reintento manual
 }

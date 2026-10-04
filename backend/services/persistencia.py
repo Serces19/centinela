@@ -555,8 +555,8 @@ class PersistenciaService:
         self.tbl_config.put_item(Item=item)
         return True
 
-    def obtener_feedback(self, huella: str | None = None, limite: int = 20) -> list[dict]:
-        """Rechazos recientes (más nuevos primero), opcionalmente de una misma causa (`huella`)."""
+    def obtener_feedback(self, huella: str | None = None, familia: str | None = None, limite: int = 20) -> list[dict]:
+        """Rechazos recientes (más nuevos primero), opcionalmente de una misma causa (`huella`) o familia de causa."""
         if self.use_memory:
             items = list(self._mem_feedback)
         else:
@@ -570,6 +570,8 @@ class PersistenciaService:
                 items.extend(resp.get("Items", []))
         if huella:
             items = [it for it in items if it.get("huella_causa") == huella]
+        if familia:
+            items = [it for it in items if it.get("familia") == familia]
         items.sort(key=lambda it: it.get("ts", ""), reverse=True)
         return items[:limite]
 

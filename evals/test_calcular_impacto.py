@@ -1,77 +1,83 @@
-"""Pruebas unitarias para la herramienta `calcular_impacto` determinista."""
+"""Impacto económico determinista de cada tipo de acción (consultas registradas, sin respaldos inventados)."""
 
 from datetime import date
+
 import pytest
 
-from contracts.herramientas import CalcularImpactoIn
-from tools.impacto import calcular_impacto
+from agents.vigia import generar_alertas
+from contracts.agentes import (
+    AjustePrecio,
+    ContactoCartera,
+    CorregirVentaBajoCosto,
+    ExpeditarOC,
+    ReactivarCliente,
+    RenegociarProveedor,
+    RevisionDescuentos,
+)
+from tools.impacto import calcular_impacto_economico
 
 
-def test_impacto_s1_costo_proveedor():
-    """S1: Incremento de costo de proveedor PR08 a corte 2026-08-15 reproduce ≈ $23.55M COP."""
-    inp = CalcularImpactoIn(
-        metodo="delta_costo_x_unidades_30d",
-        parametros={"proveedor_id": "PR08"},
+def _alerta(corte: date, huella: str):
+    return next(a for a in generar_alertas(corte) if a.huella_causa == huella)
+
+
+def test_renegociar_proveedor_reproduce_sobrecosto_s1():
+    corte = date(2026, 8, 15)
+    alerta = _alerta(corte, "costo|PR08")
+    res = calcular_impacto_economico(
+        RenegociarProveedor(proveedor_id="PR08", skus=["P0001", "P0006", "P0011", "P0021"]), alerta, corte
     )
-    res = calcular_impacto(inp, corte=date(2026, 8, 15))
     assert res.horizonte == "mensual"
-    assert abs(res.valor_cop - 23558346) / 23558346 < 0.01
-    assert res.intervalo_cop is not None
+    assert abs(res.valor_cop - 23_558_346) / 23_558_346 < 0.01
+    assert res.consulta_ids and res.descripcion
 
 
-def test_impacto_s4_exceso_descuento():
-    """S4: Suma de exceso de descuento para V03 al 2026-09-30 es $8.096.844 COP."""
-    inp = CalcularImpactoIn(
-        metodo="exceso_descuento",
-        parametros={"vendedor_id": "V03"},
+def test_ajuste_de_precio_recupera_menos_que_el_sobrecosto():
+    corte = date(2026, 8, 15)
+    alerta = _alerta(corte, "costo|PR08")
+    sobrecosto = calcular_impacto_economico(
+        RenegociarProveedor(proveedor_id="PR08", skus=["P0001", "P0006", "P0011", "P0021"]), alerta, corte
+    ).valor_cop
+    ajuste = calcular_impacto_economico(AjustePrecio(skus=["P0001", "P0006", "P0011", "P0021"], pct_ajuste=10.0), alerta, corte)
+    assert 0 < ajuste.valor_cop < sobrecosto * 1.5
+    assert ajuste.intervalo_cop is not None and ajuste.intervalo_cop[1] == ajuste.valor_cop
+
+
+def test_exceso_descuento_s4():
+    corte = date(2026, 9, 30)
+    res = calcular_impacto_economico(RevisionDescuentos(vendedor_id="V03", medida="revision_previa_cotizacion"), _alerta(corte, "descuento_en_exceso|V03"), corte)
+    assert res.horizonte == "unico" and abs(res.valor_cop - 8_096_844) <= 1
+
+
+def test_cartera_vencida_s2():
+    corte = date(2026, 9, 30)
+    res = calcular_impacto_economico(ContactoCartera(cliente_id="C0496", nivel="solo_contado"), _alerta(corte, "saldo_vencido|C0496"), corte)
+    assert res.valor_cop == 48_647_744 and res.intervalo_cop == (48_647_744, 89_461_493)
+
+
+def test_cliente_inactivo_s5():
+    corte = date(2026, 9, 30)
+    res = calcular_impacto_economico(ReactivarCliente(cliente_id="C0061", vendedor_id="V18", canal="visita"), _alerta(corte, "veces_intervalo_habitual|C0061"), corte)
+    assert res.horizonte == "mensual" and res.valor_cop == 29_469_987
+
+
+def test_quiebre_s3():
+    corte = date(2026, 9, 30)
+    res = calcular_impacto_economico(
+        ExpeditarOC(oc_id="OC-003421", proveedor_id="PR23", sku="P0119", bodega_id="BOD-MDE", via="contactar_proveedor"),
+        _alerta(corte, "cobertura_dias|P0119"), corte,
     )
-    res = calcular_impacto(inp, corte=date(2026, 9, 30))
-    assert res.horizonte == "unico"
-    assert abs(res.valor_cop - 8096844) <= 1
+    assert res.horizonte == "unico" and res.valor_cop > 0
 
 
-def test_impacto_s2_cartera_vencida():
-    """S2: Cartera vencida de cliente C0496 al 2026-09-30 es $48.647.744 COP."""
-    inp = CalcularImpactoIn(
-        metodo="cartera_vencida_en_riesgo",
-        parametros={"cliente_id": "C0496"},
-    )
-    res = calcular_impacto(inp, corte=date(2026, 9, 30))
-    assert res.horizonte == "unico"
-    assert res.valor_cop == 48647744
-    assert res.intervalo_cop == (48647744, 89461493)
+def test_venta_bajo_costo_por_sku():
+    corte = date(2026, 9, 30)
+    res = calcular_impacto_economico(CorregirVentaBajoCosto(skus=["P0097"]), _alerta(corte, "venta_bajo_costo|P0097"), corte)
+    assert res.valor_cop == 1_476_747
 
 
-def test_impacto_s6_venta_bajo_costo():
-    """S6: Pérdida directa por ventas bajo costo al 2026-09-30 es $2.721.412 COP."""
-    inp = CalcularImpactoIn(
-        metodo="margen_perdido_bajo_costo",
-        parametros={},
-    )
-    res = calcular_impacto(inp, corte=date(2026, 9, 30))
-    assert res.horizonte == "unico"
-    assert res.valor_cop == 2721412
-
-
-def test_impacto_s5_cliente_inactivo():
-    """S5: Ventas promedio mensuales de cliente inactivo C0061."""
-    inp = CalcularImpactoIn(
-        metodo="ventas_perdidas_cliente_inactivo",
-        parametros={"cliente_id": "C0061"},
-    )
-    res = calcular_impacto(inp, corte=date(2026, 9, 30))
-    assert res.horizonte == "mensual"
-    assert res.valor_cop == 29469987
-    assert res.intervalo_cop is not None
-
-
-def test_impacto_s3_quiebre_inventario():
-    """S3: Ventas perdidas por quiebre para P0119 en BOD-MDE."""
-    inp = CalcularImpactoIn(
-        metodo="ventas_perdidas_quiebre",
-        parametros={"sku": "P0119", "bodega_id": "BOD-MDE"},
-    )
-    res = calcular_impacto(inp, corte=date(2026, 9, 30))
-    assert res.horizonte == "unico"
-    assert res.valor_cop > 0
-    assert len(res.consulta_ids) >= 1
+def test_sin_datos_el_impacto_es_cero_y_no_se_rellena_con_el_riesgo_de_la_alerta():
+    corte = date(2026, 9, 30)
+    alerta = _alerta(corte, "saldo_vencido|C0496")
+    res = calcular_impacto_economico(ContactoCartera(cliente_id="C9999", nivel="recordatorio"), alerta, corte)
+    assert res.valor_cop == 0 and alerta.dinero_en_riesgo_cop > 0

@@ -1,242 +1,192 @@
 # evals/test_fase2_agentes.py
-"""Pruebas de evaluación para Fases 2B, 2C y 2D:
+"""Analista, Estratega y flujo de decisión (R7).
 
-- Agente Analista (Claude Haiku 4.5, Tool Use, Cifras Trazables, Sin Números Sueltos, Trazas LLM).
-- Agente Estratega (Lista cerrada de acciones, Cálculo determinista de impacto, Coherencia de entidades).
-- Orquestador LangGraph con Human-in-the-Loop (interrupt, MemorySaver/DynamoDB, reanudación y Ejecutor).
-- Endpoints API (/alertas/{id}, /alertas/{id}/procesar, /alertas/{id}/decision con Idempotency-Key e If-Match).
+- Ficha de evidencia: cifras reales con consulta registrada.
+- Playbook: parámetros de las acciones por regla de política (no por el modelo).
+- Analista y Estratega con Claude Haiku 4.5 real: texto sin números propios, cifras citadas con marcadores.
+- Aprendizaje: un rechazo previo cambia la propuesta siguiente.
+- API: procesar -> decisión (Idempotency-Key, If-Match) -> ejecutada -> bitácora verificada.
 """
 
-from datetime import date, datetime, timezone
-import json
-import uuid
+from datetime import date
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
 from agents.analista import analizar_alerta
-from agents.estratega import _filtrar_acciones_coherentes, generar_propuesta
-from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
+from agents.estratega import generar_propuesta
+from agents.evidencia import construir_ficha
+from agents.playbook import generar_candidatas
 from agents.vigia import generar_alertas
 from api.main import app
-from contracts.agentes import (
-    AccionLLM,
-    AjustePrecio,
-    ContactoCartera,
-    DiagnosticoLLM,
-    Propuesta,
-)
-from contracts.alertas import Alerta
-from contracts.base import AlertaId, EstadoAlerta
-from contracts.bitacora import verificar_cadena
-from contracts.decision import DecisionRequest
-from contracts.evidencia import CifraTrazable, CitaPolitica, numeros_sueltos
+from contracts.agentes import DiagnosticoLLM, Propuesta
+from contracts.base import EstadoAlerta
+from contracts.evidencia import numeros_sueltos, referencias_cifras, renderizar_texto
 from services.persistencia import persistencia_service
+from services.registro_consultas import consulta_en_cache
+from services.umbrales import Umbrales
 
 
 @pytest.fixture(autouse=True)
-def setup_persistencia():
-    """Asegura modo memoria para pruebas unitarias limpias y aisladas."""
-    persistencia_service.use_memory = True
-    persistencia_service._mem_alertas.clear()
+def memoria_limpia():
+    persistencia_service.borrar_estado_demo()
     persistencia_service._mem_bitacora.clear()
-    persistencia_service._mem_trazas.clear()
-    persistencia_service._mem_propuestas.clear()
-    persistencia_service._mem_resultados.clear()
 
 
-@pytest.fixture
-def alerta_s1():
-    """Genera la alerta real de S1 (incremento de costo PR08) a corte 2026-08-15."""
-    alertas = generar_alertas(date(2026, 8, 15))
-    alerta = next((a for a in alertas if "PR08" in a.huella_causa), None)
-    assert alerta is not None, "La alerta S1 (PR08) debe ser detectada a corte 2026-08-15"
-    persistencia_service.guardar_alerta(alerta)
+def _alerta(corte: date, huella: str):
+    alerta = next(a for a in generar_alertas(corte) if a.huella_causa == huella)
+    persistencia_service.persistir_alertas_nuevas([alerta])
     return alerta
 
 
-# =============================================================================
-# Fase 2B: Pruebas del Agente Analista
-# =============================================================================
+# ---------------------------------------------------------------------------
+# Evidencia y playbook (deterministas)
+# ---------------------------------------------------------------------------
+def test_ficha_s1_cifras_reales_y_consulta_registrada():
+    corte = date(2026, 8, 15)
+    ficha = construir_ficha(_alerta(corte, "costo|PR08"), corte)
+    por_etiqueta = {c.etiqueta: c for c in ficha.cifras}
+    assert por_etiqueta["Alza de costo del proveedor (máxima entre los SKU)"].valor == 25.0
+    assert por_etiqueta["SKU del proveedor con alza de costo"].valor == 4
+    assert por_etiqueta["Margen mínimo de la línea (política)"].valor == 25.0
+    assert por_etiqueta["Margen más bajo entre los SKU al precio de lista"].valor == pytest.approx(5.8, abs=0.05)
+    for c in ficha.cifras:   # toda cifra apunta a una consulta registrada y reproducible
+        q = consulta_en_cache(c.consulta_id)
+        assert q is not None and q.filas > 0 and "DATE '2026-08-15'" in q.sql_renderizado
+
+
+def test_playbook_aplica_la_politica():
+    u = Umbrales()
+    c09 = date(2026, 9, 30)
+    casos = {
+        "saldo_vencido|C0496": ["solo_contado", "llamada_acuerdo"],      # 34 días vencido: solo contado (FIN-POL-004 §4)
+        "descuento_en_exceso|V03": ["suspender_facultad_cotizar", "revision_previa_cotizacion"],
+        "cobertura_dias|P0119": ["contactar_proveedor", "entrega_parcial", "proveedor_alterno"],
+        "veces_intervalo_habitual|C0061": ["visita", "llamada", "oferta"],
+    }
+    for huella, esperado in casos.items():
+        alerta = _alerta(c09, huella)
+        cands = generar_candidatas(alerta, construir_ficha(alerta, c09), u)
+        p = [getattr(c.parametros, "nivel", None) or getattr(c.parametros, "medida", None) or getattr(c.parametros, "via", None) or getattr(c.parametros, "canal", None) for c in cands]
+        assert p == esperado, huella
+    s6 = _alerta(c09, "venta_bajo_costo|P0097")
+    assert [c.parametros.tipo for c in generar_candidatas(s6, construir_ficha(s6, c09), u)] == ["corregir_venta_bajo_costo"]
+
+
+def test_playbook_ajuste_de_precio_repone_el_margen_minimo():
+    corte = date(2026, 8, 15)
+    alerta = _alerta(corte, "costo|PR08")
+    ficha = construir_ficha(alerta, corte)
+    cands = generar_candidatas(alerta, ficha, Umbrales())
+    assert [c.parametros.tipo for c in cands] == ["ajuste_precio", "renegociar_proveedor"]
+    ajuste = cands[0].parametros
+    assert 0 < ajuste.pct_ajuste <= 30 and set(ajuste.skus) == {"P0001", "P0006", "P0011", "P0021"}
+    # con ese ajuste, el SKU ponderado más pesado alcanza el margen mínimo de la línea
+    filas = {f["sku"]: f for f in ficha.contexto["skus"]}
+    sku = max(filas.values(), key=lambda f: f["unidades_30d"] * f["precio_lista"])
+    nuevo_margen = 1 - sku["costo_unitario"] / (sku["precio_lista"] * (1 + ajuste.pct_ajuste / 100))
+    assert nuevo_margen * 100 >= sku["margen_minimo_pct"] - 8     # ajuste ponderado: no iguala SKU por SKU
+
+
+# ---------------------------------------------------------------------------
+# Analista y Estratega con el modelo real
+# ---------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_analista_diagnostico_s1(alerta_s1: Alerta):
-    """Verifica que el Analista ejecute el bucle de razonamiento, devuelva un DiagnosticoLLM
+async def test_analista_s1_explica_con_cifras_trazables():
+    corte = date(2026, 8, 15)
+    alerta = _alerta(corte, "costo|PR08")
+    diag, trazas = await analizar_alerta(alerta)
 
-    válido por Pydantic v2, cite OPE-POL-007, registre cifras trazables y genere TrazaLLM.
-    """
-    diagnostico, trazas = await analizar_alerta(alerta_s1)
-
-    assert isinstance(diagnostico, DiagnosticoLLM)
-    assert isinstance(diagnostico.resumen, str) and len(diagnostico.resumen) > 10
-    assert isinstance(diagnostico.causa_raiz, str) and len(diagnostico.causa_raiz) > 10
-
-    # Verificación de contrato: No números sueltos en resumen ni causa_raiz
-    sueltos = numeros_sueltos(diagnostico.resumen + " " + diagnostico.causa_raiz)
-    assert not sueltos, f"Se encontraron números sueltos en el texto del diagnóstico: {sueltos}"
-
-    # Verificación de trazas y costo
-    assert len(trazas) >= 1
-    for t in trazas:
-        assert t.agente == "analista"
-        assert t.modelo is not None
-        assert t.tokens_in >= 0
-        assert t.tokens_out >= 0
-        assert t.costo_usd >= 0.0
-
-    # Trazas guardadas en persistencia
-    trazas_guardadas = persistencia_service.obtener_trazas(alerta_s1.alerta_id)
-    assert len(trazas_guardadas) >= 1
+    assert isinstance(diag, DiagnosticoLLM) and diag.evidencia_suficiente and diag.confianza >= 0.6
+    texto = diag.resumen + " " + diag.causa_raiz
+    assert referencias_cifras(texto), "el texto debe citar cifras con marcadores {cN}"
+    assert numeros_sueltos(texto, diag.numeros_politica) == []
+    rendido = renderizar_texto(texto, diag.cifras)
+    assert "{c" not in rendido and "25 %" in rendido
+    assert any(c.documento == "OPE-POL-007" for c in diag.politicas)
+    assert len(diag.cifras) >= 5 and all(consulta_en_cache(c.consulta_id) for c in diag.cifras)
+    if trazas and trazas[-1].tokens_in:
+        assert sum(t.costo_usd for t in trazas) > 0
 
 
-# =============================================================================
-# Fase 2C: Pruebas del Agente Estratega y Coherencia
-# =============================================================================
 @pytest.mark.asyncio
-async def test_estratega_propuesta_s1(alerta_s1: Alerta):
-    """Verifica que el Estratega formule una Propuesta con acciones tipadas, sin montos
+async def test_estratega_s1_elige_entre_candidatas_y_calcula_impacto():
+    corte = date(2026, 8, 15)
+    alerta = _alerta(corte, "costo|PR08")
+    diag, _ = await analizar_alerta(alerta)
+    propuesta, _ = await generar_propuesta(alerta, diag)
 
-    en el LLM y con cálculo determinista de impacto en el servidor.
-    """
-    # Diagnóstico sintético riguroso para evaluar el Estratega de forma determinista
-    diagnostico = DiagnosticoLLM(
-        resumen="Incremento de costo en proveedor PR08 afecta cuatro productos de la linea Hogar",
-        causa_raiz="El proveedor PR08 incremento costos unitarios por encima del umbral de politica OPE-POL-007",
-        cifras=[
-            CifraTrazable(etiqueta="Incremento de costo", valor=20.0, unidad="%", consulta_id="Q-0123456789ab"),
-            CifraTrazable(etiqueta="Dinero en riesgo mensual", valor=23558346.0, unidad="COP", consulta_id="Q-0123456789ab"),
-        ],
-        politicas=[
-            CitaPolitica(
-                documento="OPE-POL-007",
-                seccion="§4 Notificación de cambios de costo",
-                fragmento_hash="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            )
-        ],
-        supuestos=["Demanda se mantendrá constante"],
-        evidencia_suficiente=True,
-        confianza=0.9,
+    assert isinstance(propuesta, Propuesta) and 1 <= len(propuesta.acciones) <= 3
+    ficha = construir_ficha(alerta, corte)
+    candidatas = {c.parametros.tipo: c.parametros for c in generar_candidatas(alerta, ficha, Umbrales())}
+    for a in propuesta.acciones:
+        assert a.parametros == candidatas[a.parametros.tipo], "el modelo no puede cambiar los parámetros de la candidata"
+        assert a.impacto.valor_cop > 0 and a.impacto.consulta_ids and a.impacto.descripcion
+        texto = a.titulo + " " + a.razon
+        assert numeros_sueltos(texto) == []
+        assert all(1 <= i <= len(propuesta.cifras) for i in referencias_cifras(texto))
+    assert len({a.parametros.tipo for a in propuesta.acciones}) == len(propuesta.acciones)
+
+
+@pytest.mark.asyncio
+async def test_un_rechazo_previo_cambia_la_propuesta_siguiente():
+    corte = date(2026, 8, 15)
+    alerta = _alerta(corte, "costo|PR08")
+    diag, _ = await analizar_alerta(alerta)
+    persistencia_service.guardar_feedback(
+        alerta_id="ALR-20260701-aaaaaa", motivo="El proveedor ya aceptó revertir el alza, no subir precios",
+        actor="usuario:pruebas", huella_causa="costo|PR99", familia="costo", tipos_accion=["ajuste_precio"],
     )
-
-    propuesta, trazas = await generar_propuesta(alerta_s1, diagnostico)
-
-    assert isinstance(propuesta, Propuesta)
-    assert propuesta.alerta_id == alerta_s1.alerta_id
-    assert 1 <= len(propuesta.acciones) <= 3
-
-    # Comprobar cálculo determinista de impacto
-    for accion in propuesta.acciones:
-        assert accion.accion_id.startswith("ACC-")
-        assert accion.impacto is not None
-        assert accion.impacto.valor_cop > 0
-        assert accion.impacto.consulta_ids is not None
-
-    # Verificar persistencia de la propuesta
-    propuesta_obtenida = persistencia_service.obtener_propuesta(alerta_s1.alerta_id)
-    assert propuesta_obtenida is not None
-    assert propuesta_obtenida.alerta_id == alerta_s1.alerta_id
+    propuesta, _ = await generar_propuesta(alerta, diag)
+    assert propuesta.acciones[0].parametros.tipo == "renegociar_proveedor"
+    tipos = [a.parametros.tipo for a in propuesta.acciones]
+    assert "ajuste_precio" not in tipos[:1]
+    assert propuesta.aprendizaje and "revertir el alza" in propuesta.aprendizaje[0]
 
 
-def test_coherencia_estratega_descarte_inventados(alerta_s1: Alerta):
-    """Verifica que el filtro de coherencia descarte o ajuste acciones con entidades no existentes."""
-    acciones_llm = [
-        # Acción 1: SKU inventado que no está en la alerta
-        AccionLLM(
-            titulo="Ajuste de precio inválido",
-            razon="Intento con SKU inventado",
-            parametros=AjustePrecio(skus=["P9999"], pct_ajuste=12.0),
-            confianza=0.8,
-        ),
-        # Acción 2: Contacto a cliente inventado
-        AccionLLM(
-            titulo="Contacto a cliente inventado",
-            razon="Intento con cliente no existente en S1",
-            parametros=ContactoCartera(cliente_id="C9999", nivel="llamada_acuerdo"),
-            confianza=0.8,
-        ),
-    ]
-
-    acciones_coherentes = _filtrar_acciones_coherentes(acciones_llm, alerta_s1)
-    assert len(acciones_coherentes) >= 1
-    # Verifica que el SKU P9999 fue corregido con los SKUs reales de la alerta S1
-    for a in acciones_coherentes:
-        if isinstance(a.parametros, AjustePrecio):
-            assert "P9999" not in a.parametros.skus
-            assert any(s in ("P0005", "P0006", "P0007", "P0008") for s in a.parametros.skus)
-
-
-# =============================================================================
-# Fase 2D: Endpoints HTTP de FastAPI (/alertas, /alertas/{id}, /procesar, /decision)
-# =============================================================================
-def test_api_procesar_y_decision_flujo_completo(alerta_s1: Alerta):
-    """Prueba integral de los endpoints FastAPI:
-
-    - GET /alertas/{id}
-    - POST /alertas/{id}/procesar
-    - POST /alertas/{id}/decision (con Idempotency-Key e If-Match)
-    - Manejo de errores 400 y 409
-    """
+# ---------------------------------------------------------------------------
+# API: procesar -> decisión -> bitácora
+# ---------------------------------------------------------------------------
+def test_api_procesar_decision_y_reabrir():
     client = TestClient(app)
-    alerta_id = alerta_s1.alerta_id
+    client.post("/simulacion/reiniciar")
+    client.post("/simulacion/avanzar?dias=58")            # 2026-08-15
+    s1 = next(v for v in client.get("/alertas").json() if v["alerta"]["huella_causa"] == "costo|PR08")
+    alerta_id = s1["alerta"]["alerta_id"]
 
-    # 1. GET /alertas/{id}
-    resp_get = client.get(f"/alertas/{alerta_id}")
-    assert resp_get.status_code == 200
-    data_get = resp_get.json()
-    assert data_get["alerta"]["alerta_id"] == alerta_id
-    assert "ETag" in resp_get.headers
-    etag_version = resp_get.headers["ETag"].strip('"')
+    proc = client.post(f"/alertas/{alerta_id}/procesar")
+    assert proc.status_code == 200
+    data = proc.json()
+    assert data["alerta"]["estado"] == "propuesta" and data["alerta"]["paso_actual"] == "ninguno"
+    assert data["propuesta"]["acciones"] and data["propuesta"]["cifras"]
+    accion_ids = [a["accion_id"] for a in data["propuesta"]["acciones"]]
+    version = data["alerta"]["version"]
 
-    # 2. POST /alertas/{id}/procesar (dispara analista y estratega)
-    resp_proc = client.post(f"/alertas/{alerta_id}/procesar")
-    assert resp_proc.status_code == 200
-    data_proc = resp_proc.json()
-    assert data_proc["alerta"]["estado"] == "propuesta"
-    assert data_proc["propuesta"] is not None
-    acciones = data_proc["propuesta"]["acciones"]
-    assert len(acciones) >= 1
-    accion_ids = [a["accion_id"] for a in acciones]
+    assert client.post(f"/alertas/{alerta_id}/decision", json={"decision": "aprobar", "accion_ids": accion_ids, "decidido_por": "usuario:sergio"}).status_code == 400
+    conflicto = client.post(f"/alertas/{alerta_id}/decision", headers={"Idempotency-Key": "k1", "If-Match": "999"},
+                            json={"decision": "aprobar", "accion_ids": accion_ids, "decidido_por": "usuario:sergio"})
+    assert conflicto.status_code == 409 and conflicto.json()["codigo"] == "conflicto_version"
 
-    version_actual = data_proc["alerta"]["version"]
+    # Rechazar con motivo y reabrir: Centinela vuelve a proponer teniendo en cuenta el rechazo
+    rechazo = client.post(f"/alertas/{alerta_id}/decision", headers={"Idempotency-Key": "k2", "If-Match": str(version)},
+                          json={"decision": "rechazar", "motivo": "Comercial prefiere renegociar antes de tocar precios.", "decidido_por": "usuario:sergio"})
+    assert rechazo.status_code == 200 and rechazo.json()["alerta"]["estado"] == "rechazada"
+    assert client.post(f"/alertas/{alerta_id}/reabrir?actor=usuario:sergio").json()["alerta"]["estado"] == "nueva"
+    segunda = client.post(f"/alertas/{alerta_id}/procesar").json()
+    assert segunda["alerta"]["estado"] == "propuesta"
+    assert segunda["propuesta"]["aprendizaje"], "la nueva propuesta debe explicar qué aprendió del rechazo"
+    nuevos_ids = [a["accion_id"] for a in segunda["propuesta"]["acciones"]]
 
-    # 3. Decision: Error 400 si falta Idempotency-Key
-    resp_sin_key = client.post(
-        f"/alertas/{alerta_id}/decision",
-        json={"decision": "aprobar", "accion_ids": accion_ids, "decidido_por": "usuario:sergio"},
-    )
-    assert resp_sin_key.status_code == 400
+    aprobada = client.post(f"/alertas/{alerta_id}/decision", headers={"Idempotency-Key": "k3"},
+                           json={"decision": "aprobar", "accion_ids": nuevos_ids, "decidido_por": "usuario:sergio"})
+    assert aprobada.status_code == 200 and aprobada.json()["alerta"]["estado"] == EstadoAlerta.EJECUTADA.value
+    assert len(aprobada.json()["resultado"]["borradores"]) == len(nuevos_ids)
+    assert all(b["destino"].startswith("sandbox://") for b in aprobada.json()["resultado"]["borradores"])
 
-    # 4. Decision: Error 409 si If-Match tiene versión obsoleta
-    resp_conflict = client.post(
-        f"/alertas/{alerta_id}/decision",
-        headers={"Idempotency-Key": "idemp-001", "If-Match": "999"},
-        json={"decision": "aprobar", "accion_ids": accion_ids, "decidido_por": "usuario:sergio"},
-    )
-    assert resp_conflict.status_code == 409
-    assert resp_conflict.json()["codigo"] == "conflicto_version"
-
-    # 5. Decision: Aprobación exitosa con Idempotency-Key e If-Match correcto
-    resp_dec = client.post(
-        f"/alertas/{alerta_id}/decision",
-        headers={"Idempotency-Key": "idemp-002", "If-Match": str(version_actual)},
-        json={"decision": "aprobar", "accion_ids": accion_ids, "decidido_por": "usuario:sergio"},
-    )
-    assert resp_dec.status_code == 200
-    data_dec = resp_dec.json()
-    assert data_dec["alerta"]["estado"] == "ejecutada"
-    assert data_dec["resultado"]["ok"] is True
-    assert len(data_dec["resultado"]["borradores"]) == len(accion_ids)
-
-    # 6. Idempotencia: enviar la misma decisión nuevamente retorna el resultado exitoso
-    resp_idemp = client.post(
-        f"/alertas/{alerta_id}/decision",
-        headers={"Idempotency-Key": "idemp-002"},
-        json={"decision": "aprobar", "accion_ids": accion_ids, "decidido_por": "usuario:sergio"},
-    )
-    assert resp_idemp.status_code == 200
-    assert resp_idemp.json()["alerta"]["estado"] == "ejecutada"
-
-    # 7. Validar cadena inmutable de bitácora sellada
-    resp_bit = client.get(f"/bitacora/{alerta_id}?verificar=true")
-    assert resp_bit.status_code == 200
-    bit_data = resp_bit.json()
-    assert bit_data["cadena_valida"] is True
-    assert bit_data["total_entradas"] >= 4
+    # Idempotencia y bitácora encadenada
+    assert client.post(f"/alertas/{alerta_id}/decision", headers={"Idempotency-Key": "k3"},
+                       json={"decision": "aprobar", "accion_ids": nuevos_ids, "decidido_por": "usuario:sergio"}).status_code == 200
+    bit = client.get(f"/bitacora?alerta_id={alerta_id}&verificar=true").json()
+    assert bit["cadena_valida"] is True and bit["total_entradas"] >= 8
+    assert {e["evento"] for e in bit["entradas"]} >= {"alerta_creada", "analisis_completo", "propuesta_generada", "decision_humana", "alerta_reabierta", "accion_ejecutada"}

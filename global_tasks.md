@@ -66,11 +66,12 @@ Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una 
   - c. El Vigía lee los umbrales (margen, días de mora, cobertura, descuento, intervalo, costo %) y la autonomía limita al Ejecutor (`Informa` no genera borradores).
   - d. Reescribir `ConfiguracionPanel.tsx` para leer y guardar de verdad; quitar los valores inventados.
   - **Hecho cuando:** cambiar un umbral cambia las alertas del siguiente corte y queda registrado en la bitácora; con test.
-- [ ] **R7 · Análisis fiel a los datos (C6, C7).** `[BAK]`
-  - a. El Analista devuelve causa cualitativa y referencias a `cifras`; la UI arma las frases con los valores reales. El validador detecta también números escritos con letras.
-  - b. El porcentaje de ajuste de precio lo calcula Python (el que repone el margen mínimo de la línea) y el impacto se separa en "sobrecosto mensual" y "recuperable con la acción".
-  - c. **Aprende:** el Estratega recibe los últimos rechazos (máx. 3) del mismo tipo de acción o entidad y la propuesta lo muestra ("Se ajustó por el rechazo anterior: …").
-  - **Hecho cuando:** el diagnóstico de S1 cita 25 % de alza y los márgenes reales por SKU; un rechazo con motivo cambia la propuesta siguiente, con test.
+- [x] **R7 · Análisis fiel a los datos (C6, C7).** `[BAK]`
+  - Hecho: el **código reúne la evidencia** (`agents/evidencia.py`: fichas con cifras de consultas registradas) y el **modelo explica** citando cifras con marcadores `{cN}`; no puede escribir números propios (dígitos ni palabras), salvo umbrales literales de la política citada (`numeros_politica`). Formato validado con Pydantic y un reintento; si el modelo falla, plantilla determinista a partir de la ficha (marcada en `supuestos`); sin datos, "sin evidencia".
+  - Hecho: el **playbook** (`agents/playbook.py`) arma las acciones candidatas con parámetros reales por política (nivel de cartera por días de mora, suspensión de cotizar tras 2 semanas, ajuste de precio que repone el margen mínimo ponderado por ventas, OC a expeditar, etc.); el modelo solo elige, ordena y justifica. Sin IDs ni parámetros inventados; se eliminaron los respaldos que fabricaban datos.
+  - Hecho: impacto calculado con consultas registradas y sin relleno (`tools/impacto.py`); el ajuste de precio muestra el margen que **recupera**, y la renegociación el **sobrecosto** que evita.
+  - Hecho: **aprende de rechazos**: el motivo y los tipos de acción rechazados se guardan (tabla `centinela_config`, corregido el esquema de claves) y las propuestas siguientes de la misma familia de causa mandan al final lo ya rechazado y lo explican (`Propuesta.aprendizaje`). `POST /alertas/{id}/reabrir` permite volver a proponer tras un rechazo.
+  - Costo medido con Bedrock (Haiku 4.5): ≈ US$ 0,008 por alerta con análisis y propuesta.
 - [ ] **R8 · Chat real (C1).** `[BAK]`
   - a. Reescribir `generar_respuesta_chat_stream`: Haiku con *tool use* (`consultar_vista` incluyendo agrupación sobre `v_ventas`, y `buscar_politica`), contexto de alerta opcional, máximo 4 llamadas a herramientas, guardrail de entrada y salida, costo real desde `usage`, `consulta_id` válidos.
   - b. Las respuestas devuelven cifras trazables y, cuando hay serie temporal, un bloque `grafico` (etiquetas y valores) para pintar.

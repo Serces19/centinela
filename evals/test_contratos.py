@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from contracts import (
     Accion,
-    AccionLLM,
     AjustePrecio,
     Alerta,
     AlertaVista,
@@ -25,7 +24,10 @@ from contracts import (
     ImpactoCalculado,
     Kpi,
     Propuesta,
-    PropuestaLLM,
+    SeleccionAccion,
+    SeleccionEstratega,
+    numeros_en,
+    renderizar_texto,
     ResultadoEjecucion,
     Severidad,
     SimulacionResp,
@@ -130,9 +132,9 @@ def test_diagnostico_llm_validacion():
         fragmento_hash="a" * 64,
     )
 
-    # Válido: sin números sueltos en texto libre
+    # Válido: las cifras se citan con marcadores {cN}, sin números propios en el texto
     diag = DiagnosticoLLM(
-        resumen="Incremento de costo en proveedor PR08 afecta cuatro productos de la linea Hogar.",
+        resumen="Incremento de costo en proveedor PR08: {c1} de alza en la linea Hogar.",
         causa_raiz="El proveedor PR08 actualizó tarifas según OPE-POL-007 sin reflejo oportuno en precios.",
         cifras=[cifra],
         politicas=[cita],
@@ -142,16 +144,37 @@ def test_diagnostico_llm_validacion():
     )
     assert diag.confianza == 0.9
 
-    # Inválido: números sueltos en causa raíz
-    with pytest.raises(ValidationError):
-        DiagnosticoLLM(
-            resumen="Afecta cuatro productos.",
-            causa_raiz="El costo subió 5 por ciento inesperadamente.",
-            cifras=[cifra],
-            politicas=[cita],
-            evidencia_suficiente=True,
-            confianza=0.9,
-        )
+    # Inválido: números sueltos (dígitos o palabras) o marcadores inexistentes
+    for resumen, causa in [
+        ("Afecta cuatro productos.", "El costo subió inesperadamente."),
+        ("Subió.", "El costo subió 5 por ciento inesperadamente."),
+        ("Subió {c1}.", "Y también {c7}."),
+    ]:
+        with pytest.raises(ValidationError):
+            DiagnosticoLLM(resumen=resumen, causa_raiz=causa, cifras=[cifra], politicas=[cita], evidencia_suficiente=True, confianza=0.9)
+
+    # Excepción: dígitos que aparecen literalmente en la política citada (umbrales)
+    ok = DiagnosticoLLM(
+        resumen="Costo sobre el umbral de 5 % de OPE-POL-007 §4.",
+        causa_raiz="Comercial debe revisar el precio en 10 días hábiles.",
+        cifras=[cifra], politicas=[cita], numeros_politica=["5", "10"], evidencia_suficiente=True, confianza=0.9,
+    )
+    assert ok.numeros_politica == ["5", "10"]
+    with pytest.raises(ValidationError):   # las palabras de número nunca se permiten
+        DiagnosticoLLM(resumen="Umbral de cinco por ciento.", causa_raiz="Sin más.", cifras=[cifra], politicas=[cita], numeros_politica=["5"], evidencia_suficiente=True, confianza=0.9)
+
+
+def test_renderizado_de_cifras_y_numeros_de_politica():
+    cifras = [
+        CifraTrazable(etiqueta="Alza", valor=25.0, unidad="%", consulta_id="Q-123456789012"),
+        CifraTrazable(etiqueta="Sobrecosto", valor=23522184, unidad="COP", consulta_id="Q-123456789012"),
+        CifraTrazable(etiqueta="SKU", valor=4, unidad="skus", consulta_id="Q-123456789012"),
+        CifraTrazable(etiqueta="Cobertura", valor=3.5, unidad="dias", consulta_id="Q-123456789012"),
+    ]
+    assert renderizar_texto("Subió {c1}, sobrecosto {c2}.", cifras) == "Subió 25 %, sobrecosto $23.522.184."
+    assert renderizar_texto("afecta {c3} SKU", cifras) == "afecta 4 SKU"       # no duplica la unidad
+    assert renderizar_texto("cobertura de {c4}", cifras) == "cobertura de 3,5 días"
+    assert numeros_en("más de 5% en 10 días hábiles, 1.518 unidades") == ["1.518", "10", "5"]
 
 
 def test_union_discriminada_acciones():
@@ -161,19 +184,18 @@ def test_union_discriminada_acciones():
     accion_cartera = ContactoCartera(cliente_id="C0496", nivel="llamada_acuerdo")
     assert accion_cartera.tipo == "contacto_cartera"
 
-    # Verificamos PropuestaLLM con unión discriminada
-    prop_llm = PropuestaLLM(
-        acciones=[
-            AccionLLM(
-                titulo="Ajustar precio de lista",
-                razon="Trasladar incremento de costo de proveedor PR08",
-                parametros=accion_precio,
-                confianza=0.95,
-            )
-        ]
+    # El modelo solo elige candidatas por número y las justifica, sin números propios
+    sel = SeleccionEstratega(
+        selecciones=[SeleccionAccion(candidato=1, titulo="Ajustar el precio de lista", razon="Trasladar el alza de {c1} al precio.", confianza=0.95)]
     )
-    assert len(prop_llm.acciones) == 1
-    assert prop_llm.acciones[0].parametros.tipo == "ajuste_precio"
+    assert sel.selecciones[0].candidato == 1
+    with pytest.raises(ValidationError):
+        SeleccionEstratega(selecciones=[SeleccionAccion(candidato=1, titulo="Ajustar", razon="Subir el precio 11 %.", confianza=0.9)])
+    with pytest.raises(ValidationError):   # el mismo candidato dos veces
+        SeleccionEstratega(selecciones=[
+            SeleccionAccion(candidato=2, titulo="A", razon="uno.", confianza=0.9),
+            SeleccionAccion(candidato=2, titulo="B", razon="dos.", confianza=0.9),
+        ])
 
 
 def test_decision_request_reglas():

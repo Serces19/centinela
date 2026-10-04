@@ -15,7 +15,7 @@ import logging
 import uuid
 
 from agents.analista import analizar_alerta
-from agents.estratega import generar_propuesta
+from agents.estratega import SinAccionesPosibles, generar_propuesta
 from contracts.agentes import Propuesta
 from contracts.alertas import Alerta
 from contracts.base import EstadoAlerta
@@ -71,7 +71,15 @@ async def procesar_alerta_completa(
 
     alerta = alerta.model_copy(update={"paso_actual": "estratega"})
     persistencia_service.actualizar_alerta(alerta)
-    propuesta, _ = await generar_propuesta(alerta, diagnostico)
+    try:
+        propuesta, _ = await generar_propuesta(alerta, diagnostico)
+    except SinAccionesPosibles as e:
+        persistencia_service.sellar_evento(
+            alerta_id=alerta.alerta_id, evento=Evento.ERROR, actor="estratega", payload={"motivo": str(e)}
+        )
+        alerta = alerta.avanzar(EstadoAlerta.SIN_EVIDENCIA).model_copy(update={"paso_actual": "ninguno"})
+        persistencia_service.actualizar_alerta(alerta)
+        return alerta, None
     alerta = alerta.avanzar(EstadoAlerta.PROPUESTA).model_copy(update={"paso_actual": "ninguno"})
     persistencia_service.actualizar_alerta(alerta)
 
@@ -200,6 +208,7 @@ def aplicar_decision_humana(
         motivo=decision.motivo or "",
         actor=decision.decidido_por,
         huella_causa=alerta.huella_causa,
+        familia=alerta.huella_causa.split("|", 1)[0],
         tipos_accion=sorted({a.parametros.tipo for a in propuesta.acciones}) if propuesta else [],
     )
     resultado = ResultadoEjecucion(
@@ -210,3 +219,18 @@ def aplicar_decision_humana(
     )
     persistencia_service.guardar_resultado_ejecucion(resultado)
     return rechazada, resultado
+
+
+def reabrir_alerta(alerta_id: str, actor: str) -> Alerta:
+    """Vuelve a `nueva` una alerta rechazada para proponer de nuevo, ahora con el rechazo como aprendizaje."""
+    alerta = persistencia_service.obtener_alerta(alerta_id)
+    if not alerta:
+        raise ValueError(f"Alerta '{alerta_id}' no encontrada.")
+    if alerta.estado != EstadoAlerta.RECHAZADA:
+        raise ValueError(f"Solo se puede reabrir una alerta rechazada (estado actual: '{alerta.estado.value}').")
+    reabierta = alerta.avanzar(EstadoAlerta.NUEVA).model_copy(update={"paso_actual": "ninguno"})
+    persistencia_service.actualizar_alerta(reabierta, version_previa=alerta.version)
+    persistencia_service.sellar_evento(
+        alerta_id=alerta_id, evento=Evento.ALERTA_REABIERTA, actor=actor, payload={"motivo": "volver a proponer tras un rechazo"}
+    )
+    return reabierta

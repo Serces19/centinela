@@ -31,7 +31,7 @@ from fastapi import Body, FastAPI, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa
+from agents.pipeline import aplicar_decision_humana, procesar_alerta_completa, reabrir_alerta
 from agents.vigia import generar_alertas
 from contracts.alertas import Alerta, AlertaVista, ResumenAlertas
 from contracts.base import EstadoAlerta
@@ -359,6 +359,16 @@ async def procesar_alerta_endpoint(alerta_id: str, request: Request, response: R
         return _error(request, "interno", f"No se pudo procesar la alerta: {e}", 500)
     response.headers["ETag"] = f'"{alerta_act.version}"'
     return _vistas([alerta_act])[0]
+
+
+@app.post("/alertas/{alerta_id}/reabrir", response_model=AlertaVista, tags=["Alertas"])
+def reabrir_alerta_endpoint(alerta_id: str, request: Request, actor: str = Query(..., pattern=r"^usuario:[a-z0-9_.-]{2,30}$")):
+    """Vuelve a `nueva` una alerta rechazada para que Centinela proponga de nuevo teniendo en cuenta el rechazo."""
+    try:
+        alerta = reabrir_alerta(alerta_id, actor)
+    except ValueError as e:
+        return _error(request, "transicion_invalida", str(e), 409)
+    return _vistas([alerta])[0]
 
 
 @app.post("/alertas/{alerta_id}/decision", tags=["Alertas"])

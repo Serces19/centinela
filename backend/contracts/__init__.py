@@ -2,7 +2,6 @@
 
 from .agentes import (
     Accion,
-    AccionLLM,
     AjustePrecio,
     ContactoCartera,
     CorregirVentaBajoCosto,
@@ -11,7 +10,11 @@ from .agentes import (
     ImpactoCalculado,
     ParametrosAccion,
     Propuesta,
-    PropuestaLLM,
+    RenegociarProveedor,
+    SeleccionAccion,
+    SeleccionEstratega,
+    CitaElegida,
+    DiagnosticoBorrador,
     ReactivarCliente,
     RevisionDescuentos,
 )
@@ -50,11 +53,20 @@ from .configuracion import (
     ConfiguracionVigia,
 )
 from .decision import Borrador, DecisionRequest, ResultadoEjecucion
-from .evidencia import CifraTrazable, CitaPolitica, ConsultaRegistrada, Unidad, numeros_sueltos
+from .evidencia import (
+    CifraTrazable,
+    CitaPolitica,
+    ConsultaRegistrada,
+    Unidad,
+    formatear_cifra,
+    numeros_en,
+    numeros_sueltos,
+    referencias_cifras,
+    renderizar_texto,
+)
 from .herramientas import (
     BuscarPoliticaIn,
     BuscarPoliticaOut,
-    CalcularImpactoIn,
     ConsultarVistaIn,
     ConsultarVistaOut,
     CrearBorradorIn,
@@ -105,6 +117,10 @@ __all__ = [
     "CifraTrazable",
     "CitaPolitica",
     "numeros_sueltos",
+    "referencias_cifras",
+    "renderizar_texto",
+    "formatear_cifra",
+    "numeros_en",
     # Alertas
     "Hallazgo",
     "Alerta",
@@ -119,8 +135,11 @@ __all__ = [
     "ReactivarCliente",
     "CorregirVentaBajoCosto",
     "ParametrosAccion",
-    "AccionLLM",
-    "PropuestaLLM",
+    "RenegociarProveedor",
+    "SeleccionAccion",
+    "SeleccionEstratega",
+    "CitaElegida",
+    "DiagnosticoBorrador",
     "ImpactoCalculado",
     "Accion",
     "Propuesta",
@@ -150,7 +169,6 @@ __all__ = [
     "BuscarPoliticaIn",
     "FragmentoPolitica",
     "BuscarPoliticaOut",
-    "CalcularImpactoIn",
     "CrearBorradorIn",
     "PipelineEvent",
     # Configuracion

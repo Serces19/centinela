@@ -41,7 +41,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="bg-white rounded-3xl p-6 border border-slate-200/70 shadow-card">
+      <section className="glass rounded-4xl p-6 ">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Observabilidad Financiera & Retorno de Inversión
@@ -61,7 +61,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
       {/* Grid de Métricas Principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Dinero en Riesgo Protegido */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/70 shadow-card space-y-2">
+        <div className="glass rounded-4xl p-5  space-y-2">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Capital Vigilado Hoy</span>
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -75,7 +75,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
         </div>
 
         {/* Costo Inferencia USD */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/70 shadow-card space-y-2">
+        <div className="glass rounded-4xl p-5  space-y-2">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Costo Total Inferencia</span>
             <Zap className="w-4 h-4 text-amber-500" />
@@ -89,7 +89,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
         </div>
 
         {/* Tokens Consumidos */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/70 shadow-card space-y-2">
+        <div className="glass rounded-4xl p-5  space-y-2">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Tokens Consumidos</span>
             <Cpu className="w-4 h-4 text-blue-500" />
@@ -103,7 +103,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
         </div>
 
         {/* Multiplicador ROI */}
-        <div className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-card bg-gradient-to-br from-white to-emerald-50/30 space-y-2">
+        <div className="bg-white p-5 rounded-4xl bg-lime/60 border border-white space-y-2">
           <div className="flex items-center justify-between text-emerald-800 text-xs font-medium">
             <span>Multiplicador ROI</span>
             <TrendingUp className="w-4 h-4 text-emerald-600" />
@@ -120,7 +120,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
       {/* Desglose de Inferencia y Arquitectura Serverless */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Tabla de Modelos */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/70 shadow-card space-y-4">
+        <div className="glass rounded-4xl p-6  space-y-4">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <Layers className="w-4 h-4 text-slate-500" />
             Desglose de Modelos y Costo Unitario
@@ -183,7 +183,7 @@ export const CostoRoiPanel: React.FC<Props> = ({ alertas }) => {
         </div>
 
         {/* Comparativa de Eficiencia Operativa */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/70 shadow-card space-y-4 flex flex-col justify-between">
+        <div className="glass rounded-4xl p-6  space-y-4 flex flex-col justify-between">
           <div className="space-y-2">
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500" />

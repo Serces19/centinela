@@ -52,6 +52,7 @@ export const App: React.FC = () => {
     modo: 'aprobar' | 'editar' | 'rechazar';
   } | null>(null);
 
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const [chatAbierto, setChatAbierto] = useState(false);
   const [chatPrompt, setChatPrompt] = useState<string | undefined>(undefined);
   const [alertaIdParaBitacora, setAlertaIdParaBitacora] = useState<string | undefined>(undefined);
@@ -251,11 +252,23 @@ export const App: React.FC = () => {
     setChatAbierto(true);
   };
 
-  const titulosPantallas: Record<TabId, string> = {
-    bandeja: 'Bandeja de Decisiones Operacionales',
-    bitacora: 'Bitácora Inmutable & Auditoría Criptográfica',
-    metricas: 'Costo de Inferencia & Retorno de Inversión (ROI)',
-    configuracion: 'Configuración de KPIs y Niveles de Autonomía',
+  const titulosPantallas: Record<TabId, { titulo: string; subtitulo: string }> = {
+    bandeja: {
+      titulo: 'Bandeja de Decisiones',
+      subtitulo: 'Riesgos operacionales detectados, diagnosticados y listos para tu aprobación.',
+    },
+    bitacora: {
+      titulo: 'Bitácora Inmutable',
+      subtitulo: 'Auditoría criptográfica encadenada con SHA-256 de cada decisión.',
+    },
+    metricas: {
+      titulo: 'Costo & Retorno',
+      subtitulo: 'Costo de inferencia de los agentes frente al dinero protegido (ROI).',
+    },
+    configuracion: {
+      titulo: 'Configuración',
+      subtitulo: 'Umbrales de KPIs y niveles de autonomía de los agentes.',
+    },
   };
 
   const fechaActual = corte?.corte ? corte.corte.split('T')[0] : CORTE_INICIAL_LIMPIO;
@@ -268,7 +281,7 @@ export const App: React.FC = () => {
   ).length;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex font-sans antialiased selection:bg-slate-900 selection:text-white">
+    <div className="min-h-screen text-slate-900 flex font-sans antialiased">
       <Toaster position="top-right" richColors />
 
       {/* 1. Barra Lateral de Navegación */}
@@ -281,6 +294,8 @@ export const App: React.FC = () => {
           toast.info(`Rol activo cambiado a: ${p.nombre} (${p.cargo})`);
         }}
         pendientesCount={pendientesCount}
+        abierto={menuAbierto}
+        onCerrar={() => setMenuAbierto(false)}
       />
 
       {/* 2. Área Principal de Contenido */}
@@ -294,11 +309,13 @@ export const App: React.FC = () => {
           onIrAFecha={handleIrAFecha}
           chatAbierto={chatAbierto}
           onToggleChat={() => setChatAbierto(!chatAbierto)}
-          tituloPantalla={titulosPantallas[tabActiva]}
+          tituloPantalla={titulosPantallas[tabActiva].titulo}
+          subtituloPantalla={titulosPantallas[tabActiva].subtitulo}
+          onAbrirMenu={() => setMenuAbierto(true)}
         />
 
         {/* Contenido según la pestaña activa */}
-        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+        <main key={tabActiva} className="flex-1 px-4 sm:px-6 lg:px-8 pt-3 pb-10 max-w-[1500px] w-full animate-fade-up">
           {tabActiva === 'bandeja' && (
             <BandejaDecisiones
               alertas={alertas}

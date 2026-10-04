@@ -68,8 +68,8 @@ async def test_escenario_s1_ciclo_completo_aprobacion():
 
     # 2. Diagnóstico y Estratega
     diagnostico = DiagnosticoLLM(
-        resumen="Incremento de costo del proveedor PR08 en cuatro SKU de la linea Hogar",
-        causa_raiz="Aumento unilateral superior al umbral del cinco por ciento sin previo aviso segun OPE-POL-007",
+        resumen="Incremento de costo del proveedor PR08 de {c1} en la linea Hogar",
+        causa_raiz="Aumento unilateral superior al umbral de politica sin previo aviso segun OPE-POL-007",
         cifras=[
             CifraTrazable(etiqueta="Dinero en riesgo", valor=23522184.0, unidad="COP", consulta_id="Q-0123456789ab"),
         ],
@@ -86,8 +86,7 @@ async def test_escenario_s1_ciclo_completo_aprobacion():
     )
     propuesta, _ = await generar_propuesta(alerta_s1, diagnostico)
     assert len(propuesta.acciones) >= 1
-    accion = propuesta.acciones[0]
-    assert isinstance(accion.parametros, AjustePrecio)
+    accion = next(a for a in propuesta.acciones if isinstance(a.parametros, AjustePrecio))   # el modelo ordena; el ajuste siempre es candidato
     assert accion.impacto.valor_cop > 0
 
     # Avanzar a PROPUESTA (NUEVA -> EN_ANALISIS -> PROPUESTA)
@@ -141,7 +140,7 @@ async def test_escenario_s2_ciclo_completo_edicion():
     # 2. Propuesta de Estratega
     diagnostico = DiagnosticoLLM(
         resumen="Mora grave y cupo de credito excedido para cliente C0496",
-        causa_raiz="Incumplimiento de politicas de credito FIN-POL-004 con saldo vencido superior a sesenta dias",
+        causa_raiz="Incumplimiento de politicas de credito FIN-POL-004 con saldo vencido de {c1}",
         cifras=[
             CifraTrazable(etiqueta="Saldo vencido", valor=48647744.0, unidad="COP", consulta_id="Q-0123456789cd"),
         ],

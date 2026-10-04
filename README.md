@@ -47,6 +47,7 @@ Centinela/
 | [docs/07_guion_demo_pitch.md](docs/07_guion_demo_pitch.md) | Guion de demo cronometrada (5 min) y pitch de negocio (3 min) con matriz de defensa. |
 | [docs/08_backtest_operacional.md](docs/08_backtest_operacional.md) | Backtest anual día a día (365 días) con matriz de días de anticipación de Centinela. |
 | [docs/09_analisis_cola_larga_s6.md](docs/09_analisis_cola_larga_s6.md) | Explorador multidimensional de cola larga y diagnóstico formal del escenario oculto (S6). |
+| [docs/11_frontend_diseno.md](docs/11_frontend_diseno.md) | Sistema de diseño del frontend (tokens, glass, layout responsivo). |
 | [plan_centinela_hackathon.md](plan_centinela_hackathon.md) | Plan de implementación, decisiones aprobadas y plan de verificación. |
 | [global_tasks.md](global_tasks.md) | Roadmap por fases; backtest y explorador de cola larga como opcionales al final. |
 | [ideas_creativas.md](ideas_creativas.md) | Diferenciadores e ideas por prioridad. |
