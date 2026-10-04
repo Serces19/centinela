@@ -8,86 +8,110 @@ import {
   Clock,
   Edit3,
   ExternalLink,
-  Filter,
   Flame,
   Info,
   Layers,
   Loader2,
-  Play,
-  RotateCcw,
   Search,
-  ShieldAlert,
   Sparkles,
   TrendingDown,
   XCircle,
+  Calendar,
+  ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
-import { AlertaVista, EstadoAlerta, Kpi, Severidad } from '../types';
+import { AlertaVista, EstadoAlerta, Kpi, Severidad, SimulacionCorte } from '../types';
 import { formatCOP, formatCOPSimple, formatFecha } from '../utils/formatters';
+import {
+  clasificarEscenario,
+  esAlertaEstrategica,
+  esCorteInicialLimpio,
+  getTituloNegocio,
+  CORTE_INICIAL_LIMPIO,
+  CORTE_HITO_S1,
+} from '../utils/alertas';
 
 interface Props {
   alertas: AlertaVista[];
   loading: boolean;
+  corte: SimulacionCorte | null;
   onSelectAlerta: (alertaVista: AlertaVista) => void;
   onProcesarAlerta: (alertaId: string) => Promise<void>;
   onAbrirDecision: (alertaVista: AlertaVista, accion: 'aprobar' | 'editar' | 'rechazar') => void;
   onVerBitacora: (alertaId: string) => void;
+  onIrAFecha?: (fechaIso: string) => Promise<void>;
   procesandoIds: Set<string>;
 }
 
 export const BandejaDecisiones: React.FC<Props> = ({
   alertas,
   loading,
+  corte,
   onSelectAlerta,
   onProcesarAlerta,
   onAbrirDecision,
   onVerBitacora,
+  onIrAFecha,
   procesandoIds,
 }) => {
+  // Pestaña principal: 'estrategicas' (Decisiones de Gerencia) o 'operativa' (Auditoría Rutinaria)
+  const [vistaPrincipal, setVistaPrincipal] = useState<'estrategicas' | 'operativa'>('estrategicas');
   const [filtroSeveridad, setFiltroSeveridad] = useState<string>('todas');
   const [filtroEstado, setFiltroEstado] = useState<string>('pendientes');
   const [busqueda, setBusqueda] = useState<string>('');
+  const [analizandoLote, setAnalizandoLote] = useState(false);
+  const [progresoLote, setProgresoLote] = useState<string>('');
 
-  // Título amigable de negocio según el KPI
-  const getTituloNegocio = (kpi: Kpi, entidadNombre?: string): string => {
-    switch (kpi) {
-      case 'margen_pct':
-        return `Caída crítica de margen por incremento de costo de proveedor`;
-      case 'saldo_vencido':
-        return `Riesgo de cartera con mora prolongada sobre el cupo autorizado`;
-      case 'dias_pago_prom':
-        return `Deterioro severo en plazo promedio de cobro de cartera`;
-      case 'cobertura_dias':
-        return `Riesgo de quiebre de inventario inminente para demanda habitual`;
-      case 'descuento_en_exceso':
-        return `Descuentos aplicados por encima del margen de política comercial`;
-      case 'veces_intervalo_habitual':
-        return `Inactividad prolongada y riesgo de fuga de cliente estratégico`;
-      case 'venta_bajo_costo':
-        return `Detección de ventas por debajo del costo unitario reposición`;
-      default:
-        return `Desviación operacional detectada en parámetros de negocio`;
-    }
-  };
+  const fechaActualIso = corte?.corte
+    ? corte.corte.split('T')[0]
+    : CORTE_INICIAL_LIMPIO;
+  const esCorteInicial = esCorteInicialLimpio(fechaActualIso);
 
-  // Cálculo del valor en 30 segundos (Hero)
-  const dineroTotalEnRiesgo = alertas.reduce(
+  // Separación de alertas: Estratégicas (alto impacto de negocio) vs Auditoría Operativa
+  const alertasEstrategicas = alertas.filter((a) => esAlertaEstrategica(a, fechaActualIso));
+  const alertasOperativas = alertas.filter((a) => !esAlertaEstrategica(a, fechaActualIso));
+
+  // Alertas a mostrar según la pestaña principal activa
+  const alertasActivas = vistaPrincipal === 'estrategicas' ? alertasEstrategicas : alertasOperativas;
+
+  // Cálculo del valor en 30 segundos (Hero) adaptado a la vista activa
+  const dineroTotalEnRiesgo = alertasActivas.reduce(
     (acc, item) => acc + (item.alerta.dinero_en_riesgo_cop || 0),
     0
   );
 
-  const pendientesCount = alertas.filter(
+  const pendientesCount = alertasActivas.filter(
     (item) =>
       item.alerta.estado === 'propuesta' ||
       item.alerta.estado === 'nueva' ||
       item.alerta.estado === 'en_analisis'
   ).length;
 
-  const criticasCount = alertas.filter(
+  const criticasCount = alertasActivas.filter(
     (item) => item.alerta.severidad === 'critica'
   ).length;
 
-  // Filtrado y ordenamiento de alertas
-  const alertasFiltradas = alertas
+  // Alertas estratégicas en estado 'nueva' pendientes de diagnóstico IA
+  const nuevasEstrategicas = alertasEstrategicas.filter((a) => a.alerta.estado === 'nueva');
+
+  // Procesamiento en lote con IA para todas las decisiones prioritarias
+  const handleAnalizarCorteIA = async () => {
+    if (nuevasEstrategicas.length === 0 || analizandoLote) return;
+    try {
+      setAnalizandoLote(true);
+      for (let i = 0; i < nuevasEstrategicas.length; i++) {
+        const item = nuevasEstrategicas[i];
+        setProgresoLote(`[${i + 1}/${nuevasEstrategicas.length}]`);
+        await onProcesarAlerta(item.alerta.alerta_id);
+      }
+    } finally {
+      setAnalizandoLote(false);
+      setProgresoLote('');
+    }
+  };
+
+  // Filtrado y ordenamiento de alertas activas
+  const alertasFiltradas = alertasActivas
     .filter((item) => {
       // Filtro severidad
       if (filtroSeveridad !== 'todas' && item.alerta.severidad !== filtroSeveridad) {
@@ -166,16 +190,16 @@ export const BandejaDecisiones: React.FC<Props> = ({
     switch (estado) {
       case 'propuesta':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
-            <Sparkles className="w-3 h-3 text-amber-500" />
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+            <Sparkles className="w-3 h-3 text-emerald-600" />
             Propuesta Lista
           </span>
         );
       case 'nueva':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-            <Clock className="w-3 h-3" />
-            Detectada por Vigía
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+            <Sparkles className="w-3 h-3 text-amber-600" />
+            Pendiente de Diagnóstico IA
           </span>
         );
       case 'en_analisis':
@@ -207,9 +231,69 @@ export const BandejaDecisiones: React.FC<Props> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1. Hero: Valor en 30 Segundos */}
+      {/* 1. Selector de Nivel de Vista: Vista Ejecutiva Prioritaria vs Auditoría Operativa */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setVistaPrincipal('estrategicas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              vistaPrincipal === 'estrategicas'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+            }`}
+          >
+            <Sparkles
+              className={`w-3.5 h-3.5 ${
+                vistaPrincipal === 'estrategicas' ? 'text-amber-300' : 'text-slate-400'
+              }`}
+            />
+            <span>Decisiones Estratégicas</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                vistaPrincipal === 'estrategicas'
+                  ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {alertasEstrategicas.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setVistaPrincipal('operativa')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              vistaPrincipal === 'operativa'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+            }`}
+            title="Ver los registros históricos y moras de rutina detectadas por DuckDB"
+          >
+            <Layers className="w-3.5 h-3.5 text-slate-400" />
+            <span>Auditoría Operativa Completa</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                vistaPrincipal === 'operativa'
+                  ? 'bg-slate-800 text-slate-200'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {alertasOperativas.length}
+            </span>
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-500 font-medium px-2 sm:px-3 text-right hidden sm:block">
+          {vistaPrincipal === 'estrategicas' ? (
+            <span>Filtro de Alto Impacto · Escenarios del Reto S1-S6</span>
+          ) : (
+            <span>Registro determinista completo (DuckDB)</span>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Hero: Valor Operacional en 30 Segundos */}
       <section className="bg-white rounded-3xl p-6 border border-slate-200/70 shadow-card relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-rose-50/50 via-amber-50/20 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-rose-50/40 via-amber-50/20 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1.5">
@@ -221,25 +305,52 @@ export const BandejaDecisiones: React.FC<Props> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
                 Vigilancia Activa
               </span>
+              {vistaPrincipal === 'estrategicas' && esCorteInicial && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  Corte Limpio (0 Críticas)
+                </span>
+              )}
             </div>
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
-              {formatCOP(dineroTotalEnRiesgo)}
+              {vistaPrincipal === 'estrategicas' && esCorteInicial
+                ? '$0 COP'
+                : formatCOP(dineroTotalEnRiesgo)}
             </h2>
             <p className="text-sm text-slate-500 max-w-xl">
-              Capital total en riesgo identificado en las operaciones de Distribuidora Andina.
-              Hay <strong className="text-slate-800">{pendientesCount} decisiones pendientes</strong>{' '}
-              de aprobación ejecutiva hoy.
+              {vistaPrincipal === 'estrategicas' ? (
+                esCorteInicial ? (
+                  <>
+                    Operación en estado óptimo al corte inicial de vigilancia (18 Jun 2026).
+                    Todos los indicadores de margen, cobertura y cartera operan dentro de los umbrales de política.
+                  </>
+                ) : (
+                  <>
+                    Capital total en riesgo identificado en las decisiones prioritarias de Distribuidora Andina.
+                    Hay <strong className="text-slate-800">{pendientesCount} decisiones pendientes</strong>{' '}
+                    de aprobación ejecutiva hoy.
+                  </>
+                )
+              ) : (
+                <>
+                  Auditoría de cartera rutinaria y seguimiento continuo ({alertasOperativas.length} registros).
+                  Histórico de moras menores y control documental en DuckDB.
+                </>
+              )}
             </p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60">
               <span className="text-[11px] text-slate-400 font-medium block">Decisiones Pendientes</span>
-              <span className="text-2xl font-bold text-slate-900">{pendientesCount}</span>
+              <span className="text-2xl font-bold text-slate-900">
+                {vistaPrincipal === 'estrategicas' && esCorteInicial ? 0 : pendientesCount}
+              </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-100">
               <span className="text-[11px] text-rose-600 font-medium block">Alertas Críticas</span>
-              <span className="text-2xl font-bold text-rose-700">{criticasCount}</span>
+              <span className="text-2xl font-bold text-rose-700">
+                {vistaPrincipal === 'estrategicas' && esCorteInicial ? 0 : criticasCount}
+              </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100 col-span-2 sm:col-span-1">
               <span className="text-[11px] text-emerald-700 font-medium block">Tasa de Aprobación</span>
@@ -249,7 +360,54 @@ export const BandejaDecisiones: React.FC<Props> = ({
         </div>
       </section>
 
-      {/* 2. Barra de Filtros y Búsqueda */}
+      {/* 3. Banner de Acción Superior: Analizar Corte con IA para Decisiones Estratégicas */}
+      {vistaPrincipal === 'estrategicas' && !esCorteInicial && alertasEstrategicas.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900 text-white shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-amber-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-white">
+                  Decisiones Prioritarias para la Gerencia
+                </h4>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                  {alertasEstrategicas.length} Casos Clave
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {nuevasEstrategicas.length > 0
+                  ? `${nuevasEstrategicas.length} alerta(s) pendiente(s) de diagnóstico. Ejecute el pipeline de agentes para generar las propuestas listas.`
+                  : 'Todas las decisiones prioritarias cuentan con propuesta lista formulada por el Analista y Estratega.'}
+              </p>
+            </div>
+          </div>
+
+          {nuevasEstrategicas.length > 0 && (
+            <button
+              onClick={handleAnalizarCorteIA}
+              disabled={analizandoLote || procesandoIds.size > 0}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-400 text-slate-950 hover:bg-amber-300 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+              title="Analizar todas las alertas estratégicas pendientes con el Analista y Estratega"
+            >
+              {analizandoLote ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  <span>Diagnosticando {progresoLote}...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+                  <span>Analizar Corte con IA ({nuevasEstrategicas.length})</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 4. Barra de Filtros y Búsqueda */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Pestañas de estado */}
         <div className="flex items-center gap-1 p-1 bg-white rounded-2xl border border-slate-200/70 shadow-xs">
@@ -299,17 +457,51 @@ export const BandejaDecisiones: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 3. Lista de Tarjetas de Alerta Priorizadas */}
+      {/* 5. Lista de Tarjetas o Estado Vacío */}
       {loading && alertas.length === 0 ? (
         <div className="p-16 text-center bg-white rounded-3xl border border-slate-200/60 shadow-xs flex flex-col items-center justify-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
           <p className="text-sm text-slate-500 font-medium">Consultando alertas operacionales del Vigía...</p>
         </div>
+      ) : vistaPrincipal === 'estrategicas' && (esCorteInicial || alertasEstrategicas.length === 0) ? (
+        /* Estado Limpio Reasegurador en el Corte Inicial (18 Jun 2026) */
+        <div className="p-12 sm:p-16 text-center bg-white rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200 shadow-xs">
+            <ShieldCheck className="w-8 h-8 text-emerald-600" />
+          </div>
+          <div className="space-y-1.5 max-w-lg mx-auto">
+            <h3 className="text-lg font-bold text-slate-900">
+              Operación en Estado Óptimo · 0 Riesgos Críticos Pendientes
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              En este corte inicial ({formatFecha(fechaActualIso)}), todos los indicadores de margen, cobertura y crédito operan dentro de los umbrales de política. La empresa se encuentra estabilizada.
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            {onIrAFecha && (
+              <button
+                onClick={() => onIrAFecha(CORTE_HITO_S1)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all shadow-xs inline-flex items-center gap-2 cursor-pointer"
+              >
+                <span>Avanzar al Hito S1 (15 Ago 2026)</span>
+                <ChevronRight className="w-4 h-4 text-amber-300" />
+              </button>
+            )}
+
+            <button
+              onClick={() => setVistaPrincipal('operativa')}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Ver Auditoría Operativa Rutinaria ({alertasOperativas.length})</span>
+            </button>
+          </div>
+        </div>
       ) : alertasFiltradas.length === 0 ? (
         <div className="p-16 text-center bg-white rounded-3xl border border-slate-200/60 shadow-xs space-y-2">
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
           <h3 className="text-base font-semibold text-slate-800">
-            No hay alertas que coincidan con los filtros
+            No hay alertas que coincidan con los filtros seleccionados
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             La operación se encuentra dentro de los parámetros de control definidos o no hay hallazgos para este criterio.
@@ -322,6 +514,7 @@ export const BandejaDecisiones: React.FC<Props> = ({
             const primerHallazgo = alerta.hallazgos[0];
             const estaProcesando = procesandoIds.has(alerta.alerta_id);
             const tienePropuesta = !!item.propuesta && alerta.estado === 'propuesta';
+            const escenarioInfo = clasificarEscenario(item);
 
             // Resolución del nombre principal
             const entidadesKeys = Object.keys(item.nombres_resueltos);
@@ -329,8 +522,10 @@ export const BandejaDecisiones: React.FC<Props> = ({
             const entidadPrincipalNombre =
               item.nombres_resueltos[entidadPrincipalId] || entidadPrincipalId;
 
-            const tituloNegocio = primerHallazgo
-              ? getTituloNegocio(primerHallazgo.kpi, entidadPrincipalNombre)
+            const tituloNegocio = escenarioInfo
+              ? escenarioInfo.titulo
+              : primerHallazgo
+              ? getTituloNegocio(primerHallazgo.kpi, entidadPrincipalNombre, primerHallazgo.regla)
               : 'Alerta Operacional';
 
             return (
@@ -339,9 +534,16 @@ export const BandejaDecisiones: React.FC<Props> = ({
                 className="bg-white rounded-2xl sm:rounded-3xl p-5 border border-slate-200/70 hover:border-slate-300 hover:shadow-card-hover transition-all duration-200 group flex flex-col lg:flex-row lg:items-center justify-between gap-5"
               >
                 {/* Lado izquierdo: Metadatos, título, entidad y propuesta */}
-                <div className="space-y-3 flex-1">
+                <div className="space-y-3 flex-1 min-w-0">
                   {/* Fila superior de badges */}
                   <div className="flex flex-wrap items-center gap-2">
+                    {escenarioInfo && (
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${escenarioInfo.badgeBg} ${escenarioInfo.badgeText} ${escenarioInfo.badgeBorder}`}
+                      >
+                        {escenarioInfo.tag}
+                      </span>
+                    )}
                     {getSeveridadBadge(alerta.severidad)}
                     {getEstadoBadge(alerta.estado)}
                     <span className="text-[11px] text-slate-400 font-mono">
@@ -359,12 +561,12 @@ export const BandejaDecisiones: React.FC<Props> = ({
                       onClick={() => onSelectAlerta(item)}
                       className="text-base font-bold text-slate-900 hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-1.5"
                     >
-                      <span>{tituloNegocio}</span>
-                      <ArrowUpRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" />
+                      <span className="truncate">{tituloNegocio}</span>
+                      <ArrowUpRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500 shrink-0" />
                     </h3>
 
                     {/* Entidad afectada resuelta */}
-                    <div className="flex items-center gap-2 mt-1 text-xs text-slate-600">
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-600">
                       <span className="font-semibold text-slate-800">
                         {entidadPrincipalNombre}
                       </span>
@@ -377,29 +579,33 @@ export const BandejaDecisiones: React.FC<Props> = ({
                     </div>
                   </div>
 
-                  {/* Resumen o propuesta del Estratega si existe */}
+                  {/* Propuesta del Estratega si existe */}
                   {tienePropuesta && item.propuesta && (
-                    <div className="p-3 rounded-2xl bg-amber-50/50 border border-amber-100/80 text-xs text-amber-950 flex items-start gap-2.5">
-                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="font-semibold text-amber-900 block mb-0.5">
+                    <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/80 text-xs text-amber-950 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                        <strong className="font-bold text-amber-900 text-xs">
                           Propuesta de Acción ({item.propuesta.acciones[0]?.titulo || 'Acción Correctiva'}):
                         </strong>
-                        <p className="text-slate-700 leading-relaxed">
-                          {item.propuesta.diagnostico.resumen}
-                        </p>
                       </div>
+                      <p className="text-slate-800 leading-relaxed pl-6">
+                        {item.propuesta.diagnostico.resumen}
+                      </p>
                     </div>
                   )}
 
+                  {/* Estado Pendiente de Diagnóstico IA */}
                   {alerta.estado === 'nueva' && (
-                    <p className="text-xs text-slate-500 italic">
-                      Hallazgo detectado por el Vigía. Requiere análisis por el Analista y Estratega.
-                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs text-slate-600 flex items-center gap-2">
+                      <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span>
+                        Sensor Vigía detectó una desviación respecto a los umbrales de política. Active el Diagnóstico IA para investigar la causa raíz en DuckDB y formular la propuesta económica en COP.
+                      </span>
+                    </div>
                   )}
                 </div>
 
-                {/* Lado derecho: Dinero en riesgo, confianza y acciones rápidas */}
+                {/* Lado derecho: Dinero en riesgo, confianza y acciones HITL */}
                 <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between border-t lg:border-t-0 pt-4 lg:pt-0 border-slate-100 gap-3 shrink-0">
                   {/* Dinero en riesgo y confianza */}
                   <div className="text-left lg:text-right">
@@ -410,39 +616,40 @@ export const BandejaDecisiones: React.FC<Props> = ({
                       {formatCOP(alerta.dinero_en_riesgo_cop)}
                     </div>
                     {item.propuesta && (
-                      <div className="text-[11px] font-medium text-emerald-600">
+                      <div className="text-[11px] font-semibold text-emerald-600">
                         Confianza: {(item.propuesta.diagnostico.confianza * 100).toFixed(0)}%
                       </div>
                     )}
                   </div>
 
                   {/* Botonera de acciones */}
-                  <div className="flex items-center gap-1.5">
-                    {/* Botón Examinar Causa (siempre disponible) */}
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {/* Botón Examinar Causa */}
                     <button
                       onClick={() => onSelectAlerta(item)}
                       className="px-3 py-2 rounded-xl text-xs font-medium text-slate-700 bg-slate-100/90 hover:bg-slate-200 transition-all cursor-pointer"
-                      title="Abrir detalle en 3 niveles"
+                      title="Abrir detalle en 3 niveles de Centinela"
                     >
                       Examinar Causa
                     </button>
 
-                    {/* Alerta Nueva: Analizar */}
+                    {/* Alerta Nueva: Diagnosticar con IA */}
                     {alerta.estado === 'nueva' && (
                       <button
                         onClick={() => onProcesarAlerta(alerta.alerta_id)}
                         disabled={estaProcesando}
                         className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        title="Disparar pipeline de agentes (Vigía → Analista → Estratega)"
                       >
                         {estaProcesando ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Analizando...</span>
+                            <span>Diagnosticando...</span>
                           </>
                         ) : (
                           <>
-                            <Play className="w-3.5 h-3.5" />
-                            <span>Analizar con Agentes</span>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Diagnosticar con IA</span>
                           </>
                         )}
                       </button>
@@ -456,13 +663,13 @@ export const BandejaDecisiones: React.FC<Props> = ({
                       </div>
                     )}
 
-                    {/* Alerta con Propuesta: Acciones HITL */}
+                    {/* Alerta con Propuesta Lista: Acciones HITL */}
                     {tienePropuesta && (
                       <>
                         <button
                           onClick={() => onAbrirDecision(item, 'aprobar')}
-                          className="px-3 py-2 rounded-xl text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
-                          title="Aprobar propuesta a 1 clic"
+                          className="px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 active:scale-95 transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                          title="Aprobar propuesta a 1 clic y ejecutar en Sandbox"
                         >
                           <Check className="w-3.5 h-3.5" />
                           Aprobar
@@ -470,7 +677,7 @@ export const BandejaDecisiones: React.FC<Props> = ({
 
                         <button
                           onClick={() => onAbrirDecision(item, 'editar')}
-                          className="px-2.5 py-2 rounded-xl text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                          className="px-2.5 py-2 rounded-xl text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
                           title="Editar parámetros de la propuesta"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -494,7 +701,7 @@ export const BandejaDecisiones: React.FC<Props> = ({
                       <button
                         onClick={() => onVerBitacora(alerta.alerta_id)}
                         className="px-3 py-2 rounded-xl text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
-                        title="Ver registro en la bitácora inmutable"
+                        title="Ver registro en la bitácora inmutable SHA-256"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         Ver Bitácora

@@ -172,9 +172,14 @@ export const DetalleAlertaModal: React.FC<Props> = ({
                 )}
               </div>
             ) : (
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/60 text-xs text-slate-500 italic">
-                El Vigía identificó la anomalía operacional. Aún no se ha generado la propuesta de agentes.
-                Haga clic en "Analizar con Agentes" para obtener el diagnóstico y la propuesta.
+              <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/70 text-xs text-amber-950 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-amber-900">
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                  <span>Pendiente de Diagnóstico IA</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  El sensor numérico determinista Vigía detectó una desviación respecto a los umbrales de política. Active el Diagnóstico IA para que el Analista y Estratega investiguen la causa raíz en DuckDB y formulen la propuesta con impacto económico en COP.
+                </p>
               </div>
             )}
           </section>
@@ -383,12 +388,12 @@ export const DetalleAlertaModal: React.FC<Props> = ({
                 {estaProcesando ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Analizando con Agentes...</span>
+                    <span>Diagnosticando con IA...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Analizar Alerta Ahora</span>
+                    <span>Diagnosticar con IA</span>
                   </>
                 )}
               </button>

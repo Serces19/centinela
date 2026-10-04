@@ -28,6 +28,11 @@ import {
   tomarDecision,
 } from './api/client';
 import { formatFecha } from './utils/formatters';
+import {
+  esAlertaEstrategica,
+  CORTE_INICIAL_LIMPIO,
+  CORTE_HITO_CIERRE,
+} from './utils/alertas';
 
 export const App: React.FC = () => {
   // 1. Estado de navegación y persona activa
@@ -131,6 +136,46 @@ export const App: React.FC = () => {
     }
   };
 
+  // Navegar a fecha o hito específico (soporta avanzar o retroceder)
+  const handleIrAFecha = async (fechaDestino: string) => {
+    try {
+      setLoadingReloj(true);
+      const fechaInicio = CORTE_INICIAL_LIMPIO;
+      const fechaMax = CORTE_HITO_CIERRE;
+      if (fechaDestino < fechaInicio || fechaDestino > fechaMax) {
+        toast.error(`Fecha fuera del rango permitido (${fechaInicio} a ${fechaMax})`);
+        return;
+      }
+      const fechaActualStr = corte?.corte ? corte.corte.split('T')[0] : fechaInicio;
+      if (fechaDestino === fechaActualStr) {
+        toast.info(`La simulación ya se encuentra en el corte ${formatFecha(fechaDestino)}`);
+        return;
+      }
+
+      const dDestino = new Date(fechaDestino + 'T00:00:00');
+      const dActual = new Date(fechaActualStr + 'T00:00:00');
+      const diffDias = Math.round((dDestino.getTime() - dActual.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDias > 0) {
+        await avanzarSimulacion(diffDias);
+        toast.success(`Reloj avanzado al corte: ${formatFecha(fechaDestino)}`);
+      } else {
+        await reiniciarSimulacion();
+        const dInicio = new Date(fechaInicio + 'T00:00:00');
+        const diffDesdeInicio = Math.round((dDestino.getTime() - dInicio.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDesdeInicio > 0) {
+          await avanzarSimulacion(diffDesdeInicio);
+        }
+        toast.info(`Reloj sincronizado al corte: ${formatFecha(fechaDestino)}`);
+      }
+      await fetchEstado();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al cambiar fecha de simulación');
+    } finally {
+      setLoadingReloj(false);
+    }
+  };
+
   // Procesar alerta con pipeline de agentes
   const handleProcesarAlerta = async (alertaId: string) => {
     try {
@@ -213,7 +258,9 @@ export const App: React.FC = () => {
     configuracion: 'Configuración de KPIs y Niveles de Autonomía',
   };
 
-  const pendientesCount = alertas.filter(
+  const fechaActual = corte?.corte ? corte.corte.split('T')[0] : CORTE_INICIAL_LIMPIO;
+  const alertasEstrategicas = alertas.filter((a) => esAlertaEstrategica(a, fechaActual));
+  const pendientesCount = alertasEstrategicas.filter(
     (a) =>
       a.alerta.estado === 'propuesta' ||
       a.alerta.estado === 'nueva' ||
@@ -238,12 +285,13 @@ export const App: React.FC = () => {
 
       {/* 2. Área Principal de Contenido */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar con reloj simulado y toggle de chat */}
+        {/* Topbar con reloj simulado, selector de fecha, hitos clave y toggle de chat */}
         <Topbar
           corte={corte}
           loadingReloj={loadingReloj}
           onAvanzar={handleAvanzarReloj}
           onReiniciar={handleReiniciarReloj}
+          onIrAFecha={handleIrAFecha}
           chatAbierto={chatAbierto}
           onToggleChat={() => setChatAbierto(!chatAbierto)}
           tituloPantalla={titulosPantallas[tabActiva]}
@@ -255,12 +303,14 @@ export const App: React.FC = () => {
             <BandejaDecisiones
               alertas={alertas}
               loading={loadingAlertas}
+              corte={corte}
               onSelectAlerta={(av) => setAlertaDetalle(av)}
               onProcesarAlerta={handleProcesarAlerta}
               onAbrirDecision={(av, modo) =>
                 setDecisionModal({ alertaVista: av, modo })
               }
               onVerBitacora={handleVerBitacora}
+              onIrAFecha={handleIrAFecha}
               procesandoIds={procesandoIds}
             />
           )}
