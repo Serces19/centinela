@@ -22,6 +22,13 @@ data "aws_iam_policy_document" "lambda_bedrock" {
   }
 
   statement {
+    sid       = "LeerApiKey"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.api_key_param}"]
+  }
+
+  statement {
     sid    = "BedrockKnowledgeBaseAndGuardrail"
     effect = "Allow"
     actions = [

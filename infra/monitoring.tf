@@ -109,12 +109,12 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 12
         height = 6
         properties = {
-          title   = "Alertas Generadas por Severidad (EMF)"
+          title = "Alertas Generadas por Severidad (EMF)"
           metrics = [
             ["Centinela", "AlertasGeneradas", "Severidad", "critica", { stat = "Sum", label = "Crítica", color = "#dc2626" }],
-            ["Centinela", "AlertasGeneradas", "Severidad", "alta",    { stat = "Sum", label = "Alta",    color = "#f97316" }],
-            ["Centinela", "AlertasGeneradas", "Severidad", "media",   { stat = "Sum", label = "Media",   color = "#eab308" }],
-            ["Centinela", "AlertasGeneradas", "Severidad", "baja",    { stat = "Sum", label = "Baja",    color = "#3b82f6" }]
+            ["Centinela", "AlertasGeneradas", "Severidad", "alta", { stat = "Sum", label = "Alta", color = "#f97316" }],
+            ["Centinela", "AlertasGeneradas", "Severidad", "media", { stat = "Sum", label = "Media", color = "#eab308" }],
+            ["Centinela", "AlertasGeneradas", "Severidad", "baja", { stat = "Sum", label = "Baja", color = "#3b82f6" }]
           ]
           view    = "timeSeries"
           stacked = true
@@ -129,17 +129,17 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 12
         height = 6
         properties = {
-          title   = "Latencia de Agentes Pipeline (p50 / p95 ms)"
+          title = "Latencia de Agentes Pipeline (p50 / p95 ms)"
           metrics = [
-            ["Centinela", "PipelineLatenciaMs", "Agente", "vigia",     { stat = "p95", label = "Vigía (p95)",     color = "#10b981" }],
-            ["Centinela", "PipelineLatenciaMs", "Agente", "analista",  { stat = "p95", label = "Analista (p95)",  color = "#6366f1" }],
+            ["Centinela", "PipelineLatenciaMs", "Agente", "vigia", { stat = "p95", label = "Vigía (p95)", color = "#10b981" }],
+            ["Centinela", "PipelineLatenciaMs", "Agente", "analista", { stat = "p95", label = "Analista (p95)", color = "#6366f1" }],
             ["Centinela", "PipelineLatenciaMs", "Agente", "estratega", { stat = "p95", label = "Estratega (p95)", color = "#ec4899" }],
-            ["Centinela", "PipelineLatenciaMs", "Agente", "analista",  { stat = "p50", label = "Analista (p50)",  color = "#a5b4fc" }]
+            ["Centinela", "PipelineLatenciaMs", "Agente", "analista", { stat = "p50", label = "Analista (p50)", color = "#a5b4fc" }]
           ]
-          view    = "timeSeries"
-          region  = var.aws_region
-          period  = 300
-          yAxis   = { left = { min = 0, label = "Milisegundos" } }
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 300
+          yAxis  = { left = { min = 0, label = "Milisegundos" } }
         }
       },
       {
@@ -149,16 +149,16 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 8
         height = 6
         properties = {
-          title   = "Consumo de Tokens Bedrock Claude Haiku 4.5"
+          title = "Consumo de Tokens Bedrock Claude Haiku 4.5"
           metrics = [
-            ["Centinela", "LlmTokensEntrada", "Agente", "analista",  { stat = "Sum", label = "Entrada (Analista)",  color = "#3b82f6" }],
-            ["Centinela", "LlmTokensSalida",  "Agente", "analista",  { stat = "Sum", label = "Salida (Analista)",   color = "#60a5fa" }],
+            ["Centinela", "LlmTokensEntrada", "Agente", "analista", { stat = "Sum", label = "Entrada (Analista)", color = "#3b82f6" }],
+            ["Centinela", "LlmTokensSalida", "Agente", "analista", { stat = "Sum", label = "Salida (Analista)", color = "#60a5fa" }],
             ["Centinela", "LlmTokensEntrada", "Agente", "estratega", { stat = "Sum", label = "Entrada (Estratega)", color = "#8b5cf6" }],
-            ["Centinela", "LlmTokensSalida",  "Agente", "estratega", { stat = "Sum", label = "Salida (Estratega)",  color = "#a78bfa" }]
+            ["Centinela", "LlmTokensSalida", "Agente", "estratega", { stat = "Sum", label = "Salida (Estratega)", color = "#a78bfa" }]
           ]
-          view    = "timeSeries"
-          region  = var.aws_region
-          period  = 300
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 300
         }
       },
       {
@@ -168,10 +168,10 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 8
         height = 6
         properties = {
-          title   = "Seguridad y Guardrails (Intervenciones)"
+          title = "Seguridad y Guardrails (Intervenciones)"
           metrics = [
             ["Centinela", "GuardrailIntervino", "Tipo", "ataque", { stat = "Sum", label = "Ataque Prompt (Bloqueado)", color = "#ef4444" }],
-            ["Centinela", "GuardrailIntervino", "Tipo", "pii",    { stat = "Sum", label = "PII Anonimizado",            color = "#f59e0b" }]
+            ["Centinela", "GuardrailIntervino", "Tipo", "pii", { stat = "Sum", label = "PII Anonimizado", color = "#f59e0b" }]
           ]
           view    = "timeSeries"
           stacked = true
@@ -186,13 +186,13 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 8
         height = 6
         properties = {
-          title   = "Integridad Criptográfica de Bitácora"
+          title = "Integridad Criptográfica de Bitácora"
           metrics = [
             ["Centinela", "BitacoraCadenaRota", "Tipo", "sha256_o_secuencia_invalida", { stat = "Sum", label = "Cadena Rota (Crítico)", color = "#b91c1c" }]
           ]
-          view    = "singleValue"
-          region  = var.aws_region
-          period  = 300
+          view   = "singleValue"
+          region = var.aws_region
+          period = 300
         }
       },
       {
@@ -202,14 +202,14 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 12
         height = 6
         properties = {
-          title   = "Decisiones Humanas HITL (Aprobaciones vs Rechazos)"
+          title = "Decisiones Humanas HITL (Aprobaciones vs Rechazos)"
           metrics = [
-            ["Centinela", "AprobacionesHumanas", "Decision", "aprobada",  { stat = "Sum", label = "Aprobadas",  color = "#22c55e" }],
-            ["Centinela", "Rechazos",             "Decision", "rechazada", { stat = "Sum", label = "Rechazadas", color = "#ef4444" }]
+            ["Centinela", "AprobacionesHumanas", "Decision", "aprobada", { stat = "Sum", label = "Aprobadas", color = "#22c55e" }],
+            ["Centinela", "Rechazos", "Decision", "rechazada", { stat = "Sum", label = "Rechazadas", color = "#ef4444" }]
           ]
-          view    = "timeSeries"
-          region  = var.aws_region
-          period  = 300
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 300
         }
       },
       {
@@ -219,14 +219,14 @@ resource "aws_cloudwatch_dashboard" "operaciones" {
         width  = 12
         height = 6
         properties = {
-          title   = "Métricas Nativas Lambda Backend (Invocaciones y Errores)"
+          title = "Métricas Nativas Lambda Backend (Invocaciones y Errores)"
           metrics = [
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.backend.function_name, { stat = "Sum", label = "Invocaciones", color = "#2563eb" }],
-            ["AWS/Lambda", "Errors",      "FunctionName", aws_lambda_function.backend.function_name, { stat = "Sum", label = "Errores",       color = "#dc2626" }]
+            ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.backend.function_name, { stat = "Sum", label = "Errores", color = "#dc2626" }]
           ]
-          view    = "timeSeries"
-          region  = var.aws_region
-          period  = 300
+          view   = "timeSeries"
+          region = var.aws_region
+          period = 300
         }
       }
     ]

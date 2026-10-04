@@ -59,6 +59,7 @@ ChatEvento = Annotated[Union[ChatToken, ChatCifra, ChatFin, ChatError], Field(di
 class ErrorAPI(Contrato):
     codigo: Literal[
         "validacion",
+        "no_autorizado",
         "no_encontrado",
         "transicion_invalida",
         "conflicto_version",

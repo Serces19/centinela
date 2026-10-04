@@ -44,12 +44,21 @@ def main():
     # 1. Compilación
     print(f"\n📦 1. Compilando aplicación en {frontend_dir}...")
     cmd_build = "npm run build"
+    # La API key vive en SSM y se incrusta en el build (limitación conocida: queda visible en el bundle).
+    import os
+    import boto3
+
+    api_key = boto3.client("ssm", region_name="us-east-1").get_parameter(
+        Name="/centinela/api_key", WithDecryption=True
+    )["Parameter"]["Value"]
+    env_build = {**os.environ, "VITE_API_KEY": api_key}
     res = subprocess.run(
         cmd_build,
         cwd=str(frontend_dir),
         shell=True,
         capture_output=True,
         text=True,
+        env=env_build,
     )
     if res.returncode != 0:
         print(f"❌ Error en la compilación:\n{res.stderr}\n{res.stdout}")

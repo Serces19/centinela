@@ -33,6 +33,7 @@ from contracts.decision import DecisionRequest, ResultadoEjecucion
 from contracts.operacion import ChatRequest, ChatToken, ErrorAPI, SimulacionResp
 from agents.graph import aplicar_decision_humana, procesar_alerta_completa
 from agents.vigia import generar_alertas
+from services.auth import RUTAS_PUBLICAS, auth_deshabilitada, clave_valida
 from services.chat import generar_respuesta_chat_stream
 from services.persistencia import persistencia_service
 from services.resolucion import resolver_nombres
@@ -79,7 +80,7 @@ if not os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
 
 
 # -----------------------------------------------------------------------------
-# Middleware de Logging JSON Estructurado y Propagación de x-request-id
+# Middleware de autenticación (x-api-key), logging JSON y propagación de x-request-id
 # -----------------------------------------------------------------------------
 @app.middleware("http")
 async def logging_and_request_id_middleware(request: Request, call_next):
@@ -88,7 +89,22 @@ async def logging_and_request_id_middleware(request: Request, call_next):
     ctx_request_id.set(request_id)
     start_time = time.perf_counter()
 
-    response: Response = await call_next(request)
+    requiere_clave = (
+        request.method != "OPTIONS"
+        and request.url.path not in RUTAS_PUBLICAS
+        and not auth_deshabilitada()
+    )
+    if requiere_clave and not clave_valida(request.headers.get("x-api-key")):
+        response: Response = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content=ErrorAPI(
+                codigo="no_autorizado",
+                mensaje="Falta la cabecera x-api-key o es inválida.",
+                request_id=request_id,
+            ).model_dump(mode="json"),
+        )
+    else:
+        response = await call_next(request)
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     response.headers["x-request-id"] = request_id

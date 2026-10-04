@@ -11,11 +11,14 @@ resource "aws_lambda_function" "backend" {
 
   environment {
     variables = {
-      AWS_LWA_INVOKE_MODE = "response_stream"
-      PORT                = "8080"
-      AWS_LWA_PORT        = "8080"
-      CENTINELA_ENTORNO   = var.entorno
-      KNOWLEDGE_BASE_ID   = aws_cloudformation_stack.bedrock_kb.outputs["KnowledgeBaseId"]
+      AWS_LWA_INVOKE_MODE     = "response_stream"
+      PORT                    = "8080"
+      AWS_LWA_PORT            = "8080"
+      CENTINELA_ENTORNO       = var.entorno
+      KNOWLEDGE_BASE_ID       = aws_cloudformation_stack.bedrock_kb.outputs["KnowledgeBaseId"]
+      GUARDRAIL_ID            = var.guardrail_id
+      GUARDRAIL_VERSION       = var.guardrail_version
+      CENTINELA_API_KEY_PARAM = var.api_key_param
     }
   }
 

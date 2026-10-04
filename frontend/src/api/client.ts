@@ -14,7 +14,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   'https://kshttlmqbtzbjc5a73m5v6rfre0qimbv.lambda-url.us-east-1.on.aws';
 
-const API_KEY = import.meta.env.VITE_API_KEY || 'test-dev-key-change-me';
+const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 function generateRequestId(): string {
   return `req-ui-${Math.random().toString(36).substring(2, 10)}`;

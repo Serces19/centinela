@@ -32,8 +32,8 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una tarea a la vez; cada tarea termina con pruebas en verde y un commit; al terminar una tarea que cambie arquitectura o flujo se actualiza el doc correspondiente; los umbrales y las cifras salen de la política y de los datos, nunca de entidades fijas.
 **Decisión de orquestación (cierra el plan B):** lo que corre en producción es una máquina de estados explícita (`procesar_alerta_completa` + `aplicar_decision_humana`), no el grafo de LangGraph, que nunca se invoca. Se elimina el grafo y el checkpointer simulado; la pausa de aprobación humana es el estado persistido `propuesta`.
 
-- [ ] **R0 · Línea base.** Ejecutar `pytest evals` completo y guardar el resultado; anotar la URL de la API y de Amplify; confirmar que `.env` no está versionado.
-- [ ] **R1 · Autenticación mínima (C2).** `[BAK]` `[INF]`
+- [x] **R0 · Línea base** (90 pruebas pasan, 5 fallan: todas de `test_knowledge_base`, por la KB contaminada y por la sección genérica 'Recuperado de Knowledge Base'). Ejecutar `pytest evals` completo y guardar el resultado; anotar la URL de la API y de Amplify; confirmar que `.env` no está versionado.
+- [x] **R1 · Autenticación mínima (C2)** (código, pruebas y Terraform listos; el 401 en producción se verifica en R13). `[BAK]` `[INF]`
   - a. Middleware FastAPI: exige `x-api-key` en todo menos `GET /health` y `OPTIONS`; comparación en tiempo constante; 401 con `ErrorAPI`.
   - b. La clave vive en SSM Parameter Store (SecureString) y entra a la Lambda como variable por Terraform; el frontend la lee de `VITE_API_KEY` en el build.
   - c. Probar: sin clave → 401; clave errónea → 401; clave correcta → 200; el chat SSE sigue funcionando.
