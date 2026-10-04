@@ -163,6 +163,7 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
   - a. Bucket S3 versionado y cifrado AES256 `centinela-politicas-295894327291` en `us-east-1` creado con los 3 PDFs normativos (`FIN-POL-004`, `COM-POL-002`, `OPE-POL-007`) vía `scripts/setup_s3_politicas.py`.
   - b. Servicio `PoliticasRetriever` en `backend/services/knowledge.py` con chunking de ~300 tokens por sección explícita, embeddings Bedrock Titan V2 (`amazon.titan-embed-text-v2:0`, 1024 dim), similitud coseno, caché local persistido y fallback a Bedrock Knowledge Base.
   - c. Evaluado en `evals/test_knowledge_base.py` con 5 preguntas clave verificadas al 100%: "plazo mayoristas" (FIN-POL-004 §2), "tope descuento minoristas" (COM-POL-002 §2), "cobertura mínima clase A" (OPE-POL-007 §2), "costo sube más del 5 %" (OPE-POL-007 §4) y "más de 60 días vencido" (FIN-POL-004 §4).
+  - d. Infraestructura como Código: Aprovisionamiento formal en Terraform (`infra/kb.tf`) con Bedrock Knowledge Base S3 Vectors (`OGWCO3WVFH`), Data Source S3 (`BHCVMHRB2F`), roles IAM de ejecución e inyección automática en la Lambda backend. Ingestión ejecutada y verificada.
   - **Hecho cuando:** cada pregunta devuelve el fragmento de política correcto con documento y sección. Verificado al 100%.
 - [x] **2.2 Guardrail `centinela-guardrail`.**
   - a. Creado y publicado en AWS Bedrock (`scripts/setup_guardrail.py`): Guardrail ID `zuonkeflxh8f`, versión `1`.

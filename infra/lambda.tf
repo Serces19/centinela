@@ -15,6 +15,7 @@ resource "aws_lambda_function" "backend" {
       PORT                = "8080"
       AWS_LWA_PORT        = "8080"
       CENTINELA_ENTORNO   = var.entorno
+      KNOWLEDGE_BASE_ID   = aws_cloudformation_stack.bedrock_kb.outputs["KnowledgeBaseId"]
     }
   }
 
