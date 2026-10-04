@@ -27,6 +27,81 @@ Documentos de apoyo: [01_negocio](docs/01_negocio.md) · [02_arquitectura](docs/
 
 ---
 
+## Fase R · Remediación de la auditoría (PRIORIDAD MÁXIMA: dejar el sistema listo para los jurados)
+
+Origen: [docs/10_auditoria.md](docs/10_auditoria.md). Reglas de ejecución: una tarea a la vez; cada tarea termina con pruebas en verde y un commit; al terminar una tarea que cambie arquitectura o flujo se actualiza el doc correspondiente; los umbrales y las cifras salen de la política y de los datos, nunca de entidades fijas.
+**Decisión de orquestación (cierra el plan B):** lo que corre en producción es una máquina de estados explícita (`procesar_alerta_completa` + `aplicar_decision_humana`), no el grafo de LangGraph, que nunca se invoca. Se elimina el grafo y el checkpointer simulado; la pausa de aprobación humana es el estado persistido `propuesta`.
+
+- [ ] **R0 · Línea base.** Ejecutar `pytest evals` completo y guardar el resultado; anotar la URL de la API y de Amplify; confirmar que `.env` no está versionado.
+- [ ] **R1 · Autenticación mínima (C2).** `[BAK]` `[INF]`
+  - a. Middleware FastAPI: exige `x-api-key` en todo menos `GET /health` y `OPTIONS`; comparación en tiempo constante; 401 con `ErrorAPI`.
+  - b. La clave vive en SSM Parameter Store (SecureString) y entra a la Lambda como variable por Terraform; el frontend la lee de `VITE_API_KEY` en el build.
+  - c. Probar: sin clave → 401; clave errónea → 401; clave correcta → 200; el chat SSE sigue funcionando.
+  - **Hecho cuando:** `curl` sin clave a `/alertas`, `/chat` y `/simulacion/reiniciar` devuelve 401.
+- [ ] **R2 · Orquestación simple y sin código muerto.** `[BAK]`
+  - a. Borrar `construir_grafo`, `DynamoDBSaver`, los nodos y `langgraph` de las dependencias; dejar el pipeline explícito.
+  - b. Unificar la generación de borradores (hoy duplicada en dos funciones) en una sola función.
+  - c. Quitar los respaldos que inventan datos (`_crear_accion_fallback` con IDs fijos y el diagnóstico de respaldo): si el modelo falla, la alerta pasa a `sin_evidencia` con motivo.
+  - **Hecho cuando:** `grep -rn "langgraph\|C0496\|P0119" backend/agents` no devuelve código de producción y los tests pasan.
+- [ ] **R3 · Una alerta por causa y bandeja ordenada (C3, C4).** `[BAK]`
+  - a. `alerta_id` estable por `huella_causa` (se crea en la primera detección y no cambia entre cortes).
+  - b. `GET /alertas`: ejecuta el Vigía al corte actual, une cada hallazgo con el registro persistido por huella (estado, propuesta, versión) y devuelve valores del corte actual; las causas que ya no se detectan no se muestran.
+  - c. Agrupar la cartera: un cliente = una alerta (une saldo vencido y días de pago); `dinero_en_riesgo` sin doble conteo.
+  - d. El Vigía persiste en el primer `GET` o en `avanzar`, nunca un duplicado.
+  - e. Endpoint de resumen: `GET /alertas/resumen` → total de dinero en riesgo (sin doble conteo), número de alertas por severidad y **las 3 decisiones clave** (mayor $ × severidad).
+  - f. `POST /simulacion/reiniciar` borra alertas, propuestas, resultados, trazas y feedback de la demo (no la bitácora) y vuelve al corte limpio.
+  - **Hecho cuando:** 0 huellas duplicadas en la respuesta; el total de dinero en riesgo no supera la cartera abierta; avanzar el reloj muestra S2-S5 sin quedarse con las alertas viejas.
+- [ ] **R4 · Reloj que dispara de verdad (C8).** `[BAK]`
+  - a. `POST /simulacion/avanzar`: mueve el corte, ejecuta y persiste el Vigía, y responde con `alertas_nuevas` (no `pipeline_disparado` falso).
+  - b. Campo `paso_actual` en la alerta (`vigia`/`analista`/`estratega`/`ninguno`), actualizado por el pipeline.
+  - c. La UI encadena el análisis de las 3 decisiones clave tras avanzar el reloj.
+  - **Hecho cuando:** tras avanzar a 2026-08-15 aparece la alerta de S1, con paso visible y propuesta lista sin pasos manuales.
+- [ ] **R5 · Knowledge Base limpia (C5).** `[INF]`
+  - a. Crear un vector bucket e índice propios (`centinela-vectors-<cuenta>`, dimensión 1024, coseno) y apuntar la KB de Centinela a ellos; sin tocar los recursos de `legal-ai-scope-knowledge-base`.
+  - b. Dejar una sola copia de cada política en S3 con el nombre canónico (`FIN-POL-004`, `COM-POL-002`, `OPE-POL-007`), re-sincronizar y verificar.
+  - c. Una sola ruta de recuperación en `knowledge.py` (KB); borrar el modo híbrido local y la caché de embeddings.
+  - d. Arreglar `test_knowledge_base` y añadir una prueba que falla si aparece cualquier documento que no sea de las tres políticas.
+  - **Hecho cuando:** 5 consultas de política devuelven solo fragmentos de las 3 políticas, sin duplicados.
+- [ ] **R6 · Configuración real (C7).** `[BAK]` `[FRO]`
+  - a. Contrato `ConfigKpi` y tabla `centinela_config`: umbrales por KPI con sus valores por defecto tomados de `metricas.yaml` y de la política, y autonomía por tipo de acción (Informa/Propone/Ejecuta).
+  - b. `GET /config` y `PUT /config` (validados).
+  - c. El Vigía lee los umbrales (margen, días de mora, cobertura, descuento, intervalo, costo %) y la autonomía limita al Ejecutor (`Informa` no genera borradores).
+  - d. Reescribir `ConfiguracionPanel.tsx` para leer y guardar de verdad; quitar los valores inventados.
+  - **Hecho cuando:** cambiar un umbral cambia las alertas del siguiente corte y queda registrado en la bitácora; con test.
+- [ ] **R7 · Análisis fiel a los datos (C6, C7).** `[BAK]`
+  - a. El Analista devuelve causa cualitativa y referencias a `cifras`; la UI arma las frases con los valores reales. El validador detecta también números escritos con letras.
+  - b. El porcentaje de ajuste de precio lo calcula Python (el que repone el margen mínimo de la línea) y el impacto se separa en "sobrecosto mensual" y "recuperable con la acción".
+  - c. **Aprende:** el Estratega recibe los últimos rechazos (máx. 3) del mismo tipo de acción o entidad y la propuesta lo muestra ("Se ajustó por el rechazo anterior: …").
+  - **Hecho cuando:** el diagnóstico de S1 cita 25 % de alza y los márgenes reales por SKU; un rechazo con motivo cambia la propuesta siguiente, con test.
+- [ ] **R8 · Chat real (C1).** `[BAK]`
+  - a. Reescribir `generar_respuesta_chat_stream`: Haiku con *tool use* (`consultar_vista` incluyendo agrupación sobre `v_ventas`, y `buscar_politica`), contexto de alerta opcional, máximo 4 llamadas a herramientas, guardrail de entrada y salida, costo real desde `usage`, `consulta_id` válidos.
+  - b. Las respuestas devuelven cifras trazables y, cuando hay serie temporal, un bloque `grafico` (etiquetas y valores) para pintar.
+  - c. Borrar los casos A-E por palabra clave y la bandera `CENTINELA_BEDROCK_CHAT`.
+  - **Hecho cuando:** las tres preguntas de la auditoría ("¿qué otros clientes compran los SKU P0001 y P0006?", "¿qué otros SKU le compramos a PR08?" y la anclada a S1) responden con cifra y fuente reales, en producción, y existe una eval de chat.
+- [ ] **R9 · Frontend sin entidades fijas (C3).** `[FRO]`
+  - a. Borrar `clasificarEscenario`, `esAlertaEstrategica`, `esCorteInicialLimpio` y los títulos con cifras fijas; usar `GET /alertas/resumen`.
+  - b. Bandeja: banner con el dinero en riesgo y las 3 decisiones clave; el resto plegado y ordenado.
+  - c. Mostrar `paso_actual`; chat con gráfico; bitácora general (R10); hitos del reloj solo con fechas, sin nombres de entidades.
+  - d. Revisar teclado, contraste y vista móvil.
+  - **Hecho cuando:** `grep -rn "PR08\|C0496\|P0119\|V03\|C0061" frontend/src` no devuelve nada, y la bandeja con `SEMILLA=12` muestra los escenarios de esa semilla.
+- [ ] **R10 · Bitácora general.** `[BAK]` `[FRO]` `GET /bitacora` sin `alerta_id` (paginado, filtro por actor y evento) y vista de auditoría con "quién aprobó qué y cuándo".
+- [ ] **R11 · Credibilidad de los documentos (C8).** `[NEG]` `[BAK]`
+  - a. Backtest: primera detección del **escenario** (la entidad afectada con las reglas del propio escenario, no cualquier alerta de la entidad); quitar la columna "detección tradicional" supuesta o presentarla como supuesto.
+  - b. Unificar el impacto de S1 con lo que calcula el sistema; calcular el costo por alerta con trazas reales (ya medidas) y derivar el ROI de ahí.
+  - c. EJ-02.1 con criterio honesto: el corte limpio no tiene alertas de S1-S5; el resto del ruido se mide y se reporta.
+  - d. Consolidar la documentación (de 11 a 4 archivos) y mover los informes generados a `docs/informes/`.
+  - e. Reescribir el guion de demo y el pitch con las cifras medidas.
+  - **Hecho cuando:** cada número del pitch tiene una consulta o una traza que lo respalda.
+- [ ] **R12 · Limpieza del repositorio.** `[INF]` Mover o borrar scripts que no se usan, sacar `temp_seed_*` del árbol de trabajo, actualizar `README.md`.
+- [ ] **R13 · Despliegue y verificación final.** `[INF]`
+  - a. Reconstruir imagen, `terraform apply`, desplegar frontend.
+  - b. Ejecutar toda la suite, la evaluación del jurado y `SEMILLA=12` y `42`.
+  - c. Repetir en producción las 3 preguntas del chat, el flujo completo de S1 (reloj → alerta → detalle → chat → aprobar → bitácora) y la prueba de inyección.
+  - d. Ensayo cronometrado de la demo (≤ 5 min).
+  - **Hecho cuando:** checklist de las láminas 7, 9, 15-19 en verde con evidencia en `docs/10_auditoria.md` (§ Estado final).
+
+---
+
 ## Fase 0 · Preparación (pre-evento)
 
 - [x] **0.1 Análisis del kit y escenarios.** Verificados S1-S6 con DuckDB; ver [01_negocio](docs/01_negocio.md).
